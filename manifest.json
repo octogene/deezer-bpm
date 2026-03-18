@@ -1,0 +1,21 @@
+{
+  "manifest_version": 2,
+  "name": "Deezer BPM",
+  "version": "1.0",
+  "description": "Shows the BPM of the currently playing song on Deezer",
+  "icons": {
+    "48": "icons/icon48.svg"
+  },
+  "permissions": [
+    "https://www.deezer.com/*",
+    "https://api.deezer.com/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www.deezer.com/*"],
+      "js": ["content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}
