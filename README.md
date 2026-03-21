@@ -10,7 +10,7 @@ A browser extension for Firefox and Chrome that displays the BPM of songs on [De
 
 ## Screenshots
 
-> _Badge showing current track BPM (bottom-right), with inline BPM column in the playlist_
+<img src="screenshots/playlist.png" width="1024" alt="Deezer BPM in playlist view" />
 
 ## Installation
 
@@ -57,7 +57,7 @@ For playlist mode, the extension fetches the full track list from the API (`/pla
 
 ## Development
 
-The extension is a plain WebExtension (Manifest V2) with no build step or dependencies.
+The extension is a plain WebExtension (Manifest V3) with no build step or dependencies.
 
 ```
 deezer-bpm/
