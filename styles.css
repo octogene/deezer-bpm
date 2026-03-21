@@ -4,7 +4,8 @@
   position: fixed;
   bottom: 90px;
   right: 18px;
-  z-index: 99999;
+  z-index: 2147483647; /* max possible z-index */
+  pointer-events: auto !important;
 
   display: flex;
   flex-direction: column;
@@ -52,6 +53,7 @@
 
 /* Playlist-mode toggle button */
 #deezer-bpm-badge .dbpm-list-btn {
+  pointer-events: auto !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -76,25 +78,21 @@
 }
 
 #deezer-bpm-badge .dbpm-list-btn--on {
-  color: #a238ff;
-  background: rgba(162,56,255,.12);
+  color: #1db954 !important;
+  background: transparent !important;
+  font-size: 14px !important;
+  font-weight: 900 !important;
 }
 
 /* ── Inline BPM tags in playlist rows ────────────────────────────────────── */
 
-/*
- * Deezer's virtual list rows have:  position: absolute; height: 56px; width: 100%
- * We append our span as a child and position it absolutely within the row.
- * right: 120px lands just to the left of the duration/options columns.
- */
-.dbpm-inline {
-  position: absolute;
-  right: 150px;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 10;
-  pointer-events: none;
+/* ── BPM column tag (inserted before the duration cell in each row) ─────── */
 
+.dbpm-inline {
+  display: inline-flex;
+  align-items: center;
+
+  margin-right: 16px;
   padding: 2px 6px;
   border-radius: 4px;
 
@@ -109,6 +107,7 @@
 
   white-space: nowrap;
   user-select: none;
+  vertical-align: middle;
   transition: color .2s, border-color .2s;
 }
 

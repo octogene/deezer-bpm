@@ -55,9 +55,9 @@
         '<span class="dbpm-label">BPM</span>' +
         '<span class="dbpm-value">–</span>' +
         '<button class="dbpm-list-btn" title="Show BPM in playlist">≡</button>';
-      badge.querySelector('.dbpm-list-btn').addEventListener('click', () => {
-        setPlaylistMode(!playlistModeEnabled);
-      });
+      const btn = badge.querySelector('.dbpm-list-btn');
+      // Sync visual state in case the badge was removed and recreated by Deezer
+      btn.classList.toggle('dbpm-list-btn--on', playlistModeEnabled);
       document.body.appendChild(badge);
     }
     return badge;
@@ -185,31 +185,52 @@
 
   // ── Playlist injection ────────────────────────────────────────────────────
 
-  async function injectPlaylistBpms() {
+  /**
+   * Find the column cell that contains the track duration ("3:45").
+   * We find the leaf text node first, then walk up until we reach
+   * a direct child of a multi-column flex/grid container — that's the cell.
+   */
+  function findDurationCell(row) {
+    // 1. Find the leaf element whose text is the duration
+    let durationEl = null;
+    for (const el of row.querySelectorAll('*')) {
+      if (el.children.length === 0 && /^\d{1,2}:\d{2}$/.test(el.textContent.trim())) {
+        durationEl = el;
+        break;
+      }
+    }
+    if (!durationEl) return null;
+
+    // 2. Walk up until the parent looks like the multi-column row container
+    let el = durationEl;
+    while (el.parentElement && el.parentElement !== row) {
+      const parent = el.parentElement;
+      const display = window.getComputedStyle(parent).display;
+      if ((display === 'flex' || display === 'inline-flex' ||
+           display === 'grid' || display === 'inline-grid') &&
+          parent.children.length >= 3) {
+        // el is the duration column cell inside this flex/grid row container
+        return el;
+      }
+      el = el.parentElement;
+    }
+    return null;
+  }
+
+  /**
+   * Synchronously inject a placeholder BPM box into every unprocessed visible row.
+   * Kicks off the async BPM fetch for each one, filling in the number when it arrives.
+   * Safe to call repeatedly — already-injected rows are skipped via INJECTED_ATTR.
+   */
+  function injectPlaceholders() {
+    if (!currentTrackIds) return;
+
     stopPlaylistObserver();
 
-    // Re-fetch track list if the page has changed
-    if (currentPageUrl !== location.pathname) {
-      currentPageUrl  = location.pathname;
-      currentTrackIds = null;
-      currentTrackIds = await loadTrackIdsForCurrentPage();
-      console.log('[Deezer BPM] Track IDs loaded:', currentTrackIds?.length ?? 0);
-    }
-
-    if (!currentTrackIds || currentTrackIds.length === 0) {
-      console.log('[Deezer BPM] No track list found for this page (not a playlist/album?)');
-      if (playlistModeEnabled) startPlaylistObserver();
-      return;
-    }
-
-    // Deezer virtual list: visible rows have role="row" and aria-rowindex (1-based)
-    const rows = document.querySelectorAll('[role="row"][aria-rowindex]');
-    console.log(`[Deezer BPM] Visible rows: ${rows.length}`);
-
-    for (const row of rows) {
+    for (const row of document.querySelectorAll('[role="row"][aria-rowindex]')) {
       if (row.getAttribute(INJECTED_ATTR)) continue;
 
-      const rowIndex = parseInt(row.getAttribute('aria-rowindex'), 10) - 1; // → 0-based
+      const rowIndex = parseInt(row.getAttribute('aria-rowindex'), 10) - 1;
       const trackId  = currentTrackIds[rowIndex];
       if (!trackId) continue;
 
@@ -218,7 +239,10 @@
       const span = document.createElement('span');
       span.className = INLINE_CLASS;
       span.textContent = '…';
-      row.appendChild(span);
+
+      const durationCell = findDurationCell(row);
+      if (durationCell) durationCell.before(span);
+      else row.appendChild(span);
 
       fetchBpmCached(trackId).then(bpm => {
         if (!span.isConnected) return;
@@ -233,6 +257,26 @@
     if (playlistModeEnabled) startPlaylistObserver();
   }
 
+  /**
+   * Load track IDs for this page (async), then inject placeholders into all visible rows.
+   */
+  async function injectPlaylistBpms() {
+    if (currentPageUrl !== location.pathname) {
+      currentPageUrl  = location.pathname;
+      currentTrackIds = null;
+      currentTrackIds = await loadTrackIdsForCurrentPage();
+      console.log('[Deezer BPM] Track IDs loaded:', currentTrackIds?.length ?? 0);
+    }
+
+    if (!currentTrackIds || currentTrackIds.length === 0) {
+      console.log('[Deezer BPM] No track list found for this page (not a playlist/album?)');
+      if (playlistModeEnabled) startPlaylistObserver();
+      return;
+    }
+
+    injectPlaceholders();
+  }
+
   function removePlaylistBpms() {
     document.querySelectorAll(`.${INLINE_CLASS}`).forEach(el => el.remove());
     document.querySelectorAll(`[${INJECTED_ATTR}]`).forEach(el => el.removeAttribute(INJECTED_ATTR));
@@ -240,15 +284,16 @@
 
   function startPlaylistObserver() {
     if (playlistObserver) return;
-    let debounce = null;
     playlistObserver = new MutationObserver((mutations) => {
-      // Only react to externally added nodes (not our own spans)
-      const external = mutations.some(m =>
-        [...m.addedNodes].some(n => n.nodeType === 1 && !n.classList?.contains(INLINE_CLASS))
+      // Only react when actual row elements were added (not our own spans)
+      const hasNewRows = mutations.some(m =>
+        [...m.addedNodes].some(n =>
+          n.nodeType === 1 &&
+          !n.classList?.contains(INLINE_CLASS) &&
+          (n.getAttribute?.('role') === 'row' || n.querySelector?.('[role="row"][aria-rowindex]'))
+        )
       );
-      if (!external) return;
-      clearTimeout(debounce);
-      debounce = setTimeout(injectPlaylistBpms, 400);
+      if (hasNewRows) injectPlaceholders(); // immediate — no debounce needed
     });
     playlistObserver.observe(document.body, { childList: true, subtree: true });
   }
@@ -284,6 +329,16 @@
       }
     }
   }).observe(document.documentElement, { childList: true, subtree: true });
+
+  // ── Toggle – capture-phase listener so Deezer can't intercept it ─────────
+
+  document.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.dbpm-list-btn')) {
+      e.stopPropagation();
+      console.log('[Deezer BPM] toggle clicked, current state:', playlistModeEnabled);
+      setPlaylistMode(!playlistModeEnabled);
+    }
+  }, true /* capture */);
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
