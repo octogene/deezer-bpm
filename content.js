@@ -9,6 +9,7 @@
   // ── Shared BPM cache ──────────────────────────────────────────────────────
 
   const bpmCache = new Map(); // trackId (string) → number|null
+  const inFlight = new Map(); // trackId (string) → Promise<number|null>
 
   // ── Fetch queue (max 3 concurrent requests) ───────────────────────────────
 
@@ -32,16 +33,27 @@
     },
   };
 
+  // Fix 1: normalize IDs to strings + Fix 2: deduplicate in-flight requests
   async function fetchBpmCached(trackId) {
-    if (bpmCache.has(trackId)) return bpmCache.get(trackId);
-    return queue.add(async () => {
-      const resp = await fetch(`https://api.deezer.com/track/${trackId}`);
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      const bpm  = (typeof data.bpm === 'number' && data.bpm > 0) ? Math.round(data.bpm) : null;
-      bpmCache.set(trackId, bpm);
-      return bpm;
+    const id = String(trackId);
+    if (bpmCache.has(id)) return bpmCache.get(id);
+    if (inFlight.has(id)) return inFlight.get(id);
+
+    const promise = queue.add(async () => {
+      try {
+        const resp = await fetch(`https://api.deezer.com/track/${id}`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const bpm  = (typeof data.bpm === 'number' && data.bpm > 0) ? Math.round(data.bpm) : null;
+        bpmCache.set(id, bpm);
+        return bpm;
+      } finally {
+        inFlight.delete(id);
+      }
     });
+
+    inFlight.set(id, promise);
+    return promise;
   }
 
   // ── Badge ─────────────────────────────────────────────────────────────────
@@ -55,9 +67,8 @@
         '<span class="dbpm-label">BPM</span>' +
         '<span class="dbpm-value">–</span>' +
         '<button class="dbpm-list-btn" title="Show BPM in playlist">≡</button>';
-      const btn = badge.querySelector('.dbpm-list-btn');
       // Sync visual state in case the badge was removed and recreated by Deezer
-      btn.classList.toggle('dbpm-list-btn--on', playlistModeEnabled);
+      badge.querySelector('.dbpm-list-btn').classList.toggle('dbpm-list-btn--on', playlistModeEnabled);
       document.body.appendChild(badge);
     }
     return badge;
@@ -104,7 +115,9 @@
     );
     if (!resp.ok) return null;
     const data = await resp.json();
-    return data.data?.[0]?.id ?? null;
+    // Normalize to string so it matches bpmCache keys
+    const id = data.data?.[0]?.id;
+    return id != null ? String(id) : null;
   }
 
   async function updatePlayerBadge() {
@@ -129,8 +142,9 @@
 
   let playlistModeEnabled = false;
   let playlistObserver    = null;
-  let currentTrackIds     = null; // ordered array of track IDs for current page
-  let currentPageUrl      = null; // URL for which currentTrackIds was fetched
+  let currentTrackIds     = null; // ordered array of track ID strings for current page
+  let currentPageUrl      = null; // pathname for which currentTrackIds was fetched
+  let isLoadingTrackIds   = false; // Fix 3: prevent concurrent loads
 
   function setPlaylistMode(enabled) {
     playlistModeEnabled = enabled;
@@ -147,9 +161,6 @@
 
   // ── Deezer API – fetch ordered track IDs for current playlist/album ───────
 
-  /**
-   * Fetches all pages of a Deezer API tracklist URL, returns array of track ID strings.
-   */
   async function fetchAllTrackIds(url) {
     const ids = [];
     let next = url;
@@ -165,33 +176,24 @@
 
   async function loadTrackIdsForCurrentPage() {
     const path = location.pathname;
-
     const playlistMatch = path.match(/\/playlist\/(\d+)/);
     if (playlistMatch) {
       return fetchAllTrackIds(
         `https://api.deezer.com/playlist/${playlistMatch[1]}/tracks?limit=200`
       );
     }
-
     const albumMatch = path.match(/\/album\/(\d+)/);
     if (albumMatch) {
       return fetchAllTrackIds(
         `https://api.deezer.com/album/${albumMatch[1]}/tracks?limit=200`
       );
     }
-
     return null;
   }
 
   // ── Playlist injection ────────────────────────────────────────────────────
 
-  /**
-   * Find the column cell that contains the track duration ("3:45").
-   * We find the leaf text node first, then walk up until we reach
-   * a direct child of a multi-column flex/grid container — that's the cell.
-   */
   function findDurationCell(row) {
-    // 1. Find the leaf element whose text is the duration
     let durationEl = null;
     for (const el of row.querySelectorAll('*')) {
       if (el.children.length === 0 && /^\d{1,2}:\d{2}$/.test(el.textContent.trim())) {
@@ -201,7 +203,6 @@
     }
     if (!durationEl) return null;
 
-    // 2. Walk up until the parent looks like the multi-column row container
     let el = durationEl;
     while (el.parentElement && el.parentElement !== row) {
       const parent = el.parentElement;
@@ -209,7 +210,6 @@
       if ((display === 'flex' || display === 'inline-flex' ||
            display === 'grid' || display === 'inline-grid') &&
           parent.children.length >= 3) {
-        // el is the duration column cell inside this flex/grid row container
         return el;
       }
       el = el.parentElement;
@@ -217,11 +217,6 @@
     return null;
   }
 
-  /**
-   * Synchronously inject a placeholder BPM box into every unprocessed visible row.
-   * Kicks off the async BPM fetch for each one, filling in the number when it arrives.
-   * Safe to call repeatedly — already-injected rows are skipped via INJECTED_ATTR.
-   */
   function injectPlaceholders() {
     if (!currentTrackIds) return;
 
@@ -257,19 +252,22 @@
     if (playlistModeEnabled) startPlaylistObserver();
   }
 
-  /**
-   * Load track IDs for this page (async), then inject placeholders into all visible rows.
-   */
   async function injectPlaylistBpms() {
+    // Fix 3: bail out if a load is already in progress for this page
+    if (isLoadingTrackIds) return;
+
     if (currentPageUrl !== location.pathname) {
-      currentPageUrl  = location.pathname;
-      currentTrackIds = null;
-      currentTrackIds = await loadTrackIdsForCurrentPage();
-      console.log('[Deezer BPM] Track IDs loaded:', currentTrackIds?.length ?? 0);
+      isLoadingTrackIds = true;
+      currentPageUrl    = location.pathname;
+      currentTrackIds   = null;
+      try {
+        currentTrackIds = await loadTrackIdsForCurrentPage();
+      } finally {
+        isLoadingTrackIds = false;
+      }
     }
 
     if (!currentTrackIds || currentTrackIds.length === 0) {
-      console.log('[Deezer BPM] No track list found for this page (not a playlist/album?)');
       if (playlistModeEnabled) startPlaylistObserver();
       return;
     }
@@ -285,7 +283,6 @@
   function startPlaylistObserver() {
     if (playlistObserver) return;
     playlistObserver = new MutationObserver((mutations) => {
-      // Only react when actual row elements were added (not our own spans)
       const hasNewRows = mutations.some(m =>
         [...m.addedNodes].some(n =>
           n.nodeType === 1 &&
@@ -293,7 +290,7 @@
           (n.getAttribute?.('role') === 'row' || n.querySelector?.('[role="row"][aria-rowindex]'))
         )
       );
-      if (hasNewRows) injectPlaceholders(); // immediate — no debounce needed
+      if (hasNewRows) injectPlaceholders();
     });
     playlistObserver.observe(document.body, { childList: true, subtree: true });
   }
@@ -316,26 +313,31 @@
     }).observe(titleEl, { childList: true });
   }
 
-  let lastUrl = location.href;
-  new MutationObserver(() => {
-    if (location.href !== lastUrl) {
-      lastUrl = location.href;
-      currentTrackId  = null;
-      currentTrackIds = null; // force re-fetch for new page
-      updatePlayerBadge();
-      if (playlistModeEnabled) {
-        removePlaylistBpms();
-        setTimeout(injectPlaylistBpms, 600);
-      }
+  // Fix 4: intercept history API instead of observing the entire DOM for URL changes
+  function onUrlChange() {
+    if (location.href === lastUrl) return;
+    lastUrl = location.href;
+    currentTrackId  = null;
+    currentTrackIds = null;
+    updatePlayerBadge();
+    if (playlistModeEnabled) {
+      removePlaylistBpms();
+      setTimeout(injectPlaylistBpms, 600);
     }
-  }).observe(document.documentElement, { childList: true, subtree: true });
+  }
+
+  let lastUrl = location.href;
+  const _pushState    = history.pushState.bind(history);
+  const _replaceState = history.replaceState.bind(history);
+  history.pushState    = function (...args) { _pushState(...args);    onUrlChange(); };
+  history.replaceState = function (...args) { _replaceState(...args); onUrlChange(); };
+  window.addEventListener('popstate', onUrlChange);
 
   // ── Toggle – capture-phase listener so Deezer can't intercept it ─────────
 
   document.addEventListener('mousedown', (e) => {
     if (e.target.closest('.dbpm-list-btn')) {
       e.stopPropagation();
-      console.log('[Deezer BPM] toggle clicked, current state:', playlistModeEnabled);
       setPlaylistMode(!playlistModeEnabled);
     }
   }, true /* capture */);
