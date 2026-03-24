@@ -33,8 +33,7 @@ jobs:
         run: |
           web-ext build \
             --source-dir . \
-            --artifacts-dir web-ext-artifacts \
-            --target firefox-desktop chromium
+            --artifacts-dir web-ext-artifacts
 
       - name: Sign extension
         env:
