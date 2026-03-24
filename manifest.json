@@ -11,6 +11,14 @@
     "https://www.deezer.com/*",
     "https://api.deezer.com/*"
   ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{daa6e7d2-9aaf-4898-89a4-0f7224841a44}",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  },
   "content_scripts": [
     {
       "matches": ["https://www.deezer.com/*"],
