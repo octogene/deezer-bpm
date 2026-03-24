@@ -6,6 +6,7 @@
   "icons": {
     "48": "icons/icon48.svg"
   },
+  "permissions": ["storage"],
   "host_permissions": [
     "https://www.deezer.com/*",
     "https://api.deezer.com/*"

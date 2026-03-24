@@ -1,53 +1,109 @@
+// The entire script is wrapped in an IIFE (Immediately Invoked Function Expression)
+// to avoid polluting the global scope with our variables.
 (function () {
   'use strict';
 
-  const BADGE_ID      = 'deezer-bpm-badge';
-  const INLINE_CLASS  = 'dbpm-inline';
-  const INJECTED_ATTR = 'data-dbpm-injected';
-  const STORAGE_KEY   = 'deezerBpmPlaylistMode';
+  // DOM identifiers used to find/mark our own elements.
+  // Keeping them as constants prevents typos and makes them easy to change.
+  const BADGE_ID      = 'deezer-bpm-badge';   // id of the floating badge div
+  const INLINE_CLASS  = 'dbpm-inline';         // class on each per-row BPM span
+  const INJECTED_ATTR = 'data-dbpm-injected';  // attribute we set on rows we already processed
+  const STORAGE_KEY   = 'deezerBpmPlaylistMode'; // localStorage key for playlist mode preference
 
-  // ── Shared BPM cache ──────────────────────────────────────────────────────
+  // ── Persistent BPM cache ─────────────────────────────────────────────────
+  // We cache BPM values so we never fetch the same track twice, even across
+  // page reloads. The in-memory Map is populated from extension storage at
+  // startup and written back after every new fetch.
 
   const bpmCache = new Map(); // trackId (string) → number|null
   const inFlight = new Map(); // trackId (string) → Promise<number|null>
+                              // Tracks requests that are currently in-flight so
+                              // two callers asking for the same track share one fetch.
+
+  // browser.storage is the Firefox API name; chrome.storage is Chrome's.
+  // We pick whichever is available so the same code works in both browsers.
+  const storageApi = (typeof browser !== 'undefined' && browser.storage)
+    ? browser.storage
+    : chrome.storage;
+
+  const CACHE_STORAGE_KEY = 'deezerBpmCache';
+  const MAX_CACHE_SIZE    = 5000; // cap to avoid filling up extension storage
+
+  // Read the persisted cache from extension storage into the in-memory Map.
+  // Called once at startup, before any fetches happen.
+  async function loadPersistedCache() {
+    try {
+      const result = await storageApi.local.get(CACHE_STORAGE_KEY);
+      const saved  = result[CACHE_STORAGE_KEY];
+      if (saved && typeof saved === 'object') {
+        for (const [id, bpm] of Object.entries(saved)) bpmCache.set(id, bpm);
+      }
+    } catch (e) {
+      console.warn('[Deezer BPM] Could not load cache:', e);
+    }
+  }
+
+  // Write the in-memory cache back to extension storage.
+  // We debounce by 2 s so that a burst of fetches (e.g. loading a full playlist)
+  // only triggers one write instead of hundreds.
+  let saveDebounce = null;
+  function scheduleSaveCache() {
+    clearTimeout(saveDebounce);
+    saveDebounce = setTimeout(() => {
+      // Keep only the most recent MAX_CACHE_SIZE entries to stay within storage limits.
+      const entries = [...bpmCache.entries()].slice(-MAX_CACHE_SIZE);
+      storageApi.local.set({ [CACHE_STORAGE_KEY]: Object.fromEntries(entries) })
+        .catch(e => console.warn('[Deezer BPM] Could not persist cache:', e));
+    }, 2000);
+  }
 
   // ── Fetch queue (max 3 concurrent requests) ───────────────────────────────
+  // When playlist mode is on we could fire dozens of API requests at once,
+  // which would likely get rate-limited. This queue keeps at most 3 requests
+  // running simultaneously and queues the rest.
 
   const queue = {
     running: 0,
     max: 3,
     pending: [],
+    // Enqueue a function; returns a Promise that resolves with its return value.
     add(fn) {
       return new Promise((resolve, reject) => {
         this.pending.push({ fn, resolve, reject });
         this._run();
       });
     },
+    // Start the next pending task if we're below the concurrency limit.
     async _run() {
       if (this.running >= this.max || !this.pending.length) return;
       this.running++;
       const { fn, resolve, reject } = this.pending.shift();
       try   { resolve(await fn()); }
       catch (e) { reject(e); }
-      finally { this.running--; this._run(); }
+      finally { this.running--; this._run(); } // when one finishes, start the next
     },
   };
 
-  // Fix 1: normalize IDs to strings + Fix 2: deduplicate in-flight requests
+  // Fetch the BPM for a single track, using the in-memory cache and the queue.
   async function fetchBpmCached(trackId) {
-    const id = String(trackId);
-    if (bpmCache.has(id)) return bpmCache.get(id);
-    if (inFlight.has(id)) return inFlight.get(id);
+    const id = String(trackId); // normalise to string so cache keys are consistent
 
+    if (bpmCache.has(id)) return bpmCache.get(id); // already known — return immediately
+    if (inFlight.has(id)) return inFlight.get(id); // request already in-flight — share it
+
+    // No cache hit — create a new queued fetch.
     const promise = queue.add(async () => {
       try {
         const resp = await fetch(`https://api.deezer.com/track/${id}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
+        // Deezer reports 0 for tracks with no BPM data; treat that as "unknown".
         const bpm  = (typeof data.bpm === 'number' && data.bpm > 0) ? Math.round(data.bpm) : null;
         bpmCache.set(id, bpm);
+        scheduleSaveCache();
         return bpm;
       } finally {
+        // Always remove from inFlight when done, whether it succeeded or threw.
         inFlight.delete(id);
       }
     });
@@ -57,7 +113,11 @@
   }
 
   // ── Badge ─────────────────────────────────────────────────────────────────
+  // The floating badge is a small circular widget fixed to the bottom-right
+  // corner. It shows the BPM of the currently playing track and has a toggle
+  // button (≡) to enable/disable playlist mode.
 
+  // Returns the badge element, creating it if it doesn't exist yet.
   function getBadge() {
     let badge = document.getElementById(BADGE_ID);
     if (!badge) {
@@ -67,24 +127,39 @@
         '<span class="dbpm-label">BPM</span>' +
         '<span class="dbpm-value">–</span>' +
         '<button class="dbpm-list-btn" title="Show BPM in playlist">≡</button>';
-      // Sync visual state in case the badge was removed and recreated by Deezer
+      // Reflect current playlist mode state on the button right away.
       badge.querySelector('.dbpm-list-btn').classList.toggle('dbpm-list-btn--on', playlistModeEnabled);
       document.body.appendChild(badge);
     }
     return badge;
   }
 
+  // Update the BPM number shown on the badge.
+  // `active` adds a visual highlight (purple border) when a real BPM is shown.
   function setBadgeValue(text, active) {
     const badge = getBadge();
     badge.querySelector('.dbpm-value').textContent = text;
     badge.classList.toggle('dbpm-active', !!active);
   }
 
+  // Deezer is a SPA and sometimes removes/replaces body children during navigation.
+  // This observer recreates the badge if it disappears.
+  new MutationObserver(() => {
+    if (!document.getElementById(BADGE_ID)) getBadge();
+  }).observe(document.body, { childList: true });
+
   // ── Player – track detection ──────────────────────────────────────────────
+  // We need to know which track is currently playing so we can fetch its BPM.
+  // Deezer doesn't expose a simple event for this, so we infer it from the URL
+  // or from DOM elements in the player bar.
 
-  let currentTrackId   = null;
-  let playerController = null;
+  let currentTrackId   = null; // track ID shown on the badge right now
+  let playerController = null; // AbortController for the title-search fallback fetch
 
+  // Try to extract the playing track's ID without any network request.
+  // 1. If the URL is a /track/ID page, use that ID directly.
+  // 2. Otherwise, look for anchor tags in known player-bar selectors whose
+  //    href contains /track/ID.
   function detectTrackId() {
     const urlMatch = location.pathname.match(/\/track\/(\d+)/);
     if (urlMatch) return urlMatch[1];
@@ -104,9 +179,13 @@
     return null;
   }
 
+  // Fallback: search the Deezer API using the page title (which usually contains
+  // "Artist – Track"). Used when detectTrackId() finds nothing because Deezer's
+  // player bar links don't expose /track/ID hrefs.
   async function searchTrackByTitle() {
     const raw = document.title.replace(/[-–|]?\s*Deezer\s*$/i, '').trim();
     if (!raw) return null;
+    // Abort any previous in-flight search so we don't act on stale results.
     if (playerController) playerController.abort();
     playerController = new AbortController();
     const resp = await fetch(
@@ -115,37 +194,44 @@
     );
     if (!resp.ok) return null;
     const data = await resp.json();
-    // Normalize to string so it matches bpmCache keys
     const id = data.data?.[0]?.id;
     return id != null ? String(id) : null;
   }
 
+  // Refresh the floating badge for the currently playing track.
+  // Called whenever the title or URL changes.
   async function updatePlayerBadge() {
     let trackId = detectTrackId();
     if (!trackId) {
-      setBadgeValue('…');
+      setBadgeValue('…'); // show loading state while we search
       trackId = await searchTrackByTitle().catch(() => null);
     }
     if (!trackId) { setBadgeValue('–'); currentTrackId = null; return; }
-    if (trackId === currentTrackId) return;
+    if (trackId === currentTrackId) return; // nothing changed, skip
     currentTrackId = trackId;
     setBadgeValue('…');
     try {
       const bpm = await fetchBpmCached(trackId);
       setBadgeValue(bpm ?? 'N/A', bpm != null);
     } catch (err) {
+      // AbortError is expected when a new search supersedes the old one — ignore it.
       if (err.name !== 'AbortError') { console.warn('[Deezer BPM]', err); setBadgeValue('–'); }
     }
   }
 
   // ── Playlist mode ─────────────────────────────────────────────────────────
+  // When enabled, a BPM tag is injected next to the duration of every visible
+  // row in a playlist or album view. Deezer uses a virtualised list so only a
+  // handful of rows exist in the DOM at any time; we use a MutationObserver to
+  // inject tags into newly rendered rows as the user scrolls.
 
   let playlistModeEnabled = false;
   let playlistObserver    = null;
-  let currentTrackIds     = null; // ordered array of track ID strings for current page
+  let currentTrackIds     = null; // ordered array of track IDs for the current page
   let currentPageUrl      = null; // pathname for which currentTrackIds was fetched
-  let isLoadingTrackIds   = false; // Fix 3: prevent concurrent loads
+  let isLoadingTrackIds   = false; // prevents concurrent loads of the same page
 
+  // Enable or disable playlist mode, persisting the preference to localStorage.
   function setPlaylistMode(enabled) {
     playlistModeEnabled = enabled;
     localStorage.setItem(STORAGE_KEY, enabled ? '1' : '0');
@@ -160,7 +246,11 @@
   }
 
   // ── Deezer API – fetch ordered track IDs for current playlist/album ───────
+  // We need the track IDs in the same order as they appear on the page so we
+  // can map each row's aria-rowindex (1-based position) to a track ID.
 
+  // Fetches all pages of a paginated Deezer API list endpoint and returns an
+  // array of track IDs as strings.
   async function fetchAllTrackIds(url) {
     const ids = [];
     let next = url;
@@ -169,11 +259,13 @@
       if (!resp.ok) break;
       const data = await resp.json();
       for (const t of (data.data || [])) ids.push(String(t.id));
-      next = data.next || null;
+      next = data.next || null; // Deezer API paginates via a `next` URL field
     }
     return ids;
   }
 
+  // Inspect the current URL and fetch the track list for the playlist or album.
+  // Returns null if the current page is neither a playlist nor an album.
   async function loadTrackIdsForCurrentPage() {
     const path = location.pathname;
     const playlistMatch = path.match(/\/playlist\/(\d+)/);
@@ -193,106 +285,139 @@
 
   // ── Playlist injection ────────────────────────────────────────────────────
 
+  // Given a playlist row element, find the cell that contains the track duration
+  // (e.g. "3:45") so we can insert our BPM tag just before it.
+  //
+  // Deezer's DOM doesn't have stable class names for the duration column, so we
+  // detect it by content: a leaf element whose text matches mm:ss. We then walk
+  // up the tree to find the direct child of the row's column container — any
+  // ancestor with 3+ siblings is the column layout level we want.
   function findDurationCell(row) {
-    let durationEl = null;
-    for (const el of row.querySelectorAll('*')) {
-      if (el.children.length === 0 && /^\d{1,2}:\d{2}$/.test(el.textContent.trim())) {
-        durationEl = el;
-        break;
-      }
-    }
-    if (!durationEl) return null;
+    // Find the leaf element showing the track duration.
+    let el = [...row.querySelectorAll('*')].find(
+      e => !e.children.length && /^\d{1,2}:\d{2}$/.test(e.textContent.trim())
+    );
+    if (!el) return null;
 
-    let el = durationEl;
+    // Walk up to the column-level ancestor (first parent with 3+ children).
     while (el.parentElement && el.parentElement !== row) {
-      const parent = el.parentElement;
-      const display = window.getComputedStyle(parent).display;
-      if ((display === 'flex' || display === 'inline-flex' ||
-           display === 'grid' || display === 'inline-grid') &&
-          parent.children.length >= 3) {
-        return el;
-      }
+      if (el.parentElement.children.length >= 3) return el;
       el = el.parentElement;
     }
     return null;
   }
 
+  // Inject BPM placeholders into all currently visible rows that haven't been
+  // processed yet. The actual BPM value is filled in asynchronously once fetched.
   function injectPlaceholders() {
-    if (!currentTrackIds) return;
-
-    stopPlaylistObserver();
+    // Guard: don't inject stale data if the page has already changed.
+    if (!currentTrackIds || currentPageUrl !== location.pathname) return;
 
     for (const row of document.querySelectorAll('[role="row"][aria-rowindex]')) {
-      if (row.getAttribute(INJECTED_ATTR)) continue;
+      if (row.getAttribute(INJECTED_ATTR)) continue; // already handled
 
+      // aria-rowindex is 1-based; map it to our 0-based currentTrackIds array.
       const rowIndex = parseInt(row.getAttribute('aria-rowindex'), 10) - 1;
       const trackId  = currentTrackIds[rowIndex];
       if (!trackId) continue;
 
+      // Mark the row so we don't process it again when the observer fires.
       row.setAttribute(INJECTED_ATTR, '1');
 
       const span = document.createElement('span');
       span.className = INLINE_CLASS;
-      span.textContent = '…';
+      span.textContent = '…'; // placeholder shown while the BPM is being fetched
 
       const durationCell = findDurationCell(row);
-      if (durationCell) durationCell.before(span);
-      else row.appendChild(span);
+      if (durationCell) durationCell.before(span); // insert as a new column before duration
+      else row.appendChild(span);                   // fallback: append at the end of the row
 
+      // Fetch BPM asynchronously and update the span when ready.
       fetchBpmCached(trackId).then(bpm => {
-        if (!span.isConnected) return;
+        if (!span.isConnected) return; // row was removed from the DOM while we waited
         span.textContent = bpm != null ? String(bpm) : '?';
-        if (bpm != null) span.classList.add(`${INLINE_CLASS}--loaded`);
+        if (bpm != null) span.classList.add(`${INLINE_CLASS}--loaded`); // triggers styling change
       }).catch(err => {
         console.warn('[Deezer BPM] fetch error for track', trackId, err);
         if (span.isConnected) span.textContent = '?';
       });
     }
-
-    if (playlistModeEnabled) startPlaylistObserver();
   }
 
+  // Entry point for injecting BPMs into the current page.
+  // Handles the case where the page URL changed since the last call (navigated
+  // to a different playlist/album) by fetching a fresh track list first.
   async function injectPlaylistBpms() {
-    // Fix 3: bail out if a load is already in progress for this page
-    if (isLoadingTrackIds) return;
+    if (isLoadingTrackIds) return; // a load is already in progress — don't start another
 
     if (currentPageUrl !== location.pathname) {
+      // The user navigated to a new page. Clean up any tags from the previous page
+      // before loading the new track list.
+      removePlaylistBpms();
+
+      const targetUrl   = location.pathname;
       isLoadingTrackIds = true;
-      currentPageUrl    = location.pathname;
+      currentPageUrl    = targetUrl; // set early so other callers see the new URL
       currentTrackIds   = null;
       try {
         currentTrackIds = await loadTrackIdsForCurrentPage();
       } finally {
         isLoadingTrackIds = false;
       }
+
+      // If the URL changed *again* while we were awaiting the API response,
+      // our data is already stale. Reset and schedule a fresh attempt.
+      if (location.pathname !== targetUrl) {
+        currentPageUrl  = null;
+        currentTrackIds = null;
+        setTimeout(injectPlaylistBpms, 100);
+        return;
+      }
     }
 
-    if (!currentTrackIds || currentTrackIds.length === 0) {
-      if (playlistModeEnabled) startPlaylistObserver();
-      return;
-    }
+    if (!currentTrackIds || currentTrackIds.length === 0) return; // not a playlist/album page
 
     injectPlaceholders();
   }
 
+  // Remove all BPM tags we injected and clear the "already processed" markers
+  // so they will be re-injected if playlist mode is turned back on.
   function removePlaylistBpms() {
     document.querySelectorAll(`.${INLINE_CLASS}`).forEach(el => el.remove());
     document.querySelectorAll(`[${INJECTED_ATTR}]`).forEach(el => el.removeAttribute(INJECTED_ATTR));
   }
 
+  // Watch the entire document for newly added rows.
+  // Deezer's virtualised list only keeps visible rows in the DOM; as the user
+  // scrolls, old rows are removed and new ones are added. We use this observer
+  // to inject BPM tags into those new rows on the fly.
   function startPlaylistObserver() {
     if (playlistObserver) return;
     playlistObserver = new MutationObserver((mutations) => {
+      // Only act when actual row elements were added to the DOM.
+      // We ignore mutations caused by our own span insertions (INLINE_CLASS).
       const hasNewRows = mutations.some(m =>
         [...m.addedNodes].some(n =>
           n.nodeType === 1 &&
           !n.classList?.contains(INLINE_CLASS) &&
+          // Either the node itself is a row, or it contains rows (e.g. a container
+          // that holds many rows was added at once).
           (n.getAttribute?.('role') === 'row' || n.querySelector?.('[role="row"][aria-rowindex]'))
         )
       );
-      if (hasNewRows) injectPlaceholders();
+      if (!hasNewRows) return;
+
+      // Self-healing: if the page changed (e.g. the user navigated to a different
+      // album), trigger a full reload of track IDs before injecting.
+      // This is the primary navigation detection path — it doesn't rely on URL
+      // change events, which can be missed in SPAs.
+      if (!currentTrackIds || currentPageUrl !== location.pathname) {
+        injectPlaylistBpms();
+      } else {
+        injectPlaceholders();
+      }
     });
-    playlistObserver.observe(document.body, { childList: true, subtree: true });
+    playlistObserver.observe(document.documentElement, { childList: true, subtree: true });
   }
 
   function stopPlaylistObserver() {
@@ -300,41 +425,65 @@
   }
 
   // ── Change detection (player + URL) ──────────────────────────────────────
+  // Deezer is a SPA that uses the History API (pushState) for navigation.
+  // There is no built-in event for pushState changes, so we infer them from
+  // <title> mutations (the title always changes when the track or page changes)
+  // and from the popstate event (browser back/forward navigation).
 
+  let lastUrl   = location.href;
   let lastTitle = document.title;
+  let urlChangeTimer = null;
+
+  function onUrlChange() {
+    if (location.href === lastUrl) return; // spurious call — nothing actually changed
+    lastUrl = location.href;
+    currentTrackId = null;
+    updatePlayerBadge();
+    // Playlist cleanup is intentionally NOT done here. The MutationObserver and
+    // the safety net interval both check currentPageUrl !== location.pathname and
+    // call injectPlaylistBpms() (which runs removePlaylistBpms() first) when the
+    // page changes. Removing BPMs here caused them to disappear when clicking play,
+    // because Deezer updates the URL as part of starting playback.
+  }
+
+  // Debounce URL change handling by 150 ms to avoid acting on intermediate states
+  // during navigation (e.g. title changes before the new page is fully rendered).
+  function scheduleUrlChange() {
+    clearTimeout(urlChangeTimer);
+    urlChangeTimer = setTimeout(onUrlChange, 150);
+  }
+
+  // Watch the <title> element. Deezer updates it whenever the playing track or
+  // the current page changes, making it a reliable proxy for both events.
   const titleEl = document.querySelector('title');
   if (titleEl) {
     new MutationObserver(() => {
       if (document.title !== lastTitle) {
         lastTitle = document.title;
         currentTrackId = null;
-        updatePlayerBadge();
+        updatePlayerBadge(); // title change almost always means a new track is playing
       }
+      scheduleUrlChange();
     }).observe(titleEl, { childList: true });
   }
 
-  // Fix 4: intercept history API instead of observing the entire DOM for URL changes
-  function onUrlChange() {
-    if (location.href === lastUrl) return;
-    lastUrl = location.href;
-    currentTrackId  = null;
-    currentTrackIds = null;
-    updatePlayerBadge();
-    if (playlistModeEnabled) {
-      removePlaylistBpms();
-      setTimeout(injectPlaylistBpms, 600);
-    }
-  }
+  // Also handle browser back/forward navigation (popstate).
+  window.addEventListener('popstate', scheduleUrlChange);
 
-  let lastUrl = location.href;
-  const _pushState    = history.pushState.bind(history);
-  const _replaceState = history.replaceState.bind(history);
-  history.pushState    = function (...args) { _pushState(...args);    onUrlChange(); };
-  history.replaceState = function (...args) { _replaceState(...args); onUrlChange(); };
-  window.addEventListener('popstate', onUrlChange);
+  // Safety net: Deezer's virtualised list sometimes recycles existing row elements
+  // (updating them in-place) instead of removing and re-adding them. In that case
+  // the MutationObserver never fires for new rows, and URL changes go undetected.
+  // This interval catches those cases within 2.5 seconds.
+  setInterval(() => {
+    if (playlistModeEnabled && !isLoadingTrackIds && currentPageUrl !== location.pathname) {
+      injectPlaylistBpms();
+    }
+  }, 2500);
 
   // ── Toggle – capture-phase listener so Deezer can't intercept it ─────────
-
+  // Deezer's UI framework (Chakra UI) stops click events from bubbling in some
+  // contexts, which silently swallows our button clicks. Listening in the capture
+  // phase (the event travels down before bubbling up) ensures we always see it.
   document.addEventListener('mousedown', (e) => {
     if (e.target.closest('.dbpm-list-btn')) {
       e.stopPropagation();
@@ -344,11 +493,15 @@
 
   // ── Init ──────────────────────────────────────────────────────────────────
 
-  if (localStorage.getItem(STORAGE_KEY) === '1') {
-    setTimeout(() => setPlaylistMode(true), 900);
-  } else {
-    getBadge();
-  }
-
-  updatePlayerBadge();
+  // Load the persisted BPM cache first so any track already known doesn't need
+  // a network request. Then restore playlist mode if it was active last session
+  // (delayed 900 ms to give Deezer time to render the playlist before we inject).
+  loadPersistedCache().then(() => {
+    if (localStorage.getItem(STORAGE_KEY) === '1') {
+      setTimeout(() => setPlaylistMode(true), 900);
+    } else {
+      getBadge(); // create the badge even if playlist mode is off
+    }
+    updatePlayerBadge();
+  });
 })();
