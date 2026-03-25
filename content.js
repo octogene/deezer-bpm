@@ -225,7 +225,7 @@
   // handful of rows exist in the DOM at any time; we use a MutationObserver to
   // inject tags into newly rendered rows as the user scrolls.
 
-  let playlistModeEnabled = false;
+  let playlistModeEnabled = true;
   let playlistObserver    = null;
   let currentTrackIds     = null; // ordered array of track IDs for the current page
   let currentPageUrl      = null; // pathname for which currentTrackIds was fetched
