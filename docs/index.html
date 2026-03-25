@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Deezer BPM</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f0f1a;
+      --surface:   #1a1a2e;
+      --border:    #2a2a44;
+      --purple:    #a238ff;
+      --purple-lt: #c97dff;
+      --green:     #1db954;
+      --text:      #e8e8f0;
+      --muted:     #888;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      line-height: 1.6;
+    }
+
+    a { color: var(--purple-lt); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Hero ── */
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      padding: 80px 24px 64px;
+      background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(162,56,255,.18) 0%, transparent 70%);
+    }
+
+    .badge {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 2.5px solid var(--purple);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 32px rgba(162,56,255,.35);
+      margin-bottom: 28px;
+    }
+    .badge-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .1em; }
+    .badge-value { font-size: 22px; font-weight: 800; color: var(--purple-lt); line-height: 1; }
+
+    h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; letter-spacing: -.02em; }
+    h1 span { color: var(--purple-lt); }
+
+    .tagline {
+      margin-top: 16px;
+      font-size: 1.15rem;
+      color: var(--muted);
+      max-width: 480px;
+    }
+
+    .cta-row {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 36px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: .95rem;
+      font-weight: 600;
+      transition: opacity .2s, transform .15s;
+    }
+    .btn:hover { opacity: .85; transform: translateY(-1px); text-decoration: none; }
+    .btn-primary { background: var(--purple); color: #fff; }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+
+    /* ── Screenshot ── */
+    .screenshot-wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px 64px;
+    }
+    .screenshot-wrap img {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 48px rgba(0,0,0,.6);
+    }
+
+    /* ── Features ── */
+    .features {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 20px;
+    }
+
+    .feature {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 24px;
+    }
+    .feature-icon { font-size: 1.8rem; margin-bottom: 14px; }
+    .feature h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
+    .feature p { font-size: .9rem; color: var(--muted); line-height: 1.55; }
+
+    /* ── Install ── */
+    .install {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    .install h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    .install-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+
+    .install-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 24px;
+    }
+
+    .install-card h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .install-card ol {
+      padding-left: 20px;
+      color: var(--muted);
+      font-size: .9rem;
+      line-height: 1.8;
+    }
+
+    .install-card ol li::marker { color: var(--purple-lt); font-weight: 700; }
+
+    .download-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 16px;
+      padding: 8px 16px;
+      background: rgba(162,56,255,.15);
+      border: 1px solid rgba(162,56,255,.35);
+      border-radius: 6px;
+      font-size: .85rem;
+      font-weight: 600;
+      color: var(--purple-lt);
+      transition: background .2s;
+    }
+    .download-btn:hover { background: rgba(162,56,255,.25); text-decoration: none; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 32px 24px;
+      border-top: 1px solid var(--border);
+      font-size: .85rem;
+      color: var(--muted);
+    }
+    footer a { color: var(--muted); }
+    footer a:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+
+  <section class="hero">
+    <div class="badge">
+      <span class="badge-label">BPM</span>
+      <span class="badge-value">128</span>
+    </div>
+    <h1>Deezer <span>BPM</span></h1>
+    <p class="tagline">See the BPM of every track you play on Deezer — right in the browser, no account needed.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/octogene/deezer-bpm/releases/latest">
+        ↓ Download latest release
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/octogene/deezer-bpm">
+        GitHub →
+      </a>
+    </div>
+  </section>
+
+  <div class="screenshot-wrap">
+    <img src="../screenshots/playlist.png" alt="Deezer BPM showing BPM values in a playlist" />
+  </div>
+
+  <section class="features">
+    <div class="feature">
+      <div class="feature-icon">🎵</div>
+      <h3>Floating badge</h3>
+      <p>A small badge fixed to the bottom-right corner shows the BPM of the currently playing track, always visible.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">≡</div>
+      <h3>Playlist mode</h3>
+      <p>Toggle playlist mode with the ≡ button to show the BPM next to every track in a playlist or album view.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">⚡</div>
+      <h3>Instant &amp; cached</h3>
+      <p>BPM values are cached across sessions so tracks you've seen before load instantly, with no repeated API calls.</p>
+    </div>
+    <div class="feature">
+      <div class="feature-icon">🔑</div>
+      <h3>No API key required</h3>
+      <p>Uses the public Deezer API. No sign-up, no configuration — just install and play.</p>
+    </div>
+  </section>
+
+  <section class="install">
+    <h2>Installation</h2>
+    <div class="install-grid">
+
+      <div class="install-card">
+        <h3>🦊 Firefox</h3>
+        <ol>
+          <li>Download the <code>.xpi</code> file below</li>
+          <li>Open Firefox → <code>about:addons</code></li>
+          <li>Gear icon → <em>Install Add-on From File…</em></li>
+          <li>Select the downloaded <code>.xpi</code></li>
+        </ol>
+        <a class="download-btn" href="https://github.com/octogene/deezer-bpm/releases/latest">
+          ↓ Download .xpi
+        </a>
+      </div>
+
+      <div class="install-card">
+        <h3>🌐 Chrome</h3>
+        <ol>
+          <li>Download the <code>.zip</code> file below and unzip it</li>
+          <li>Open Chrome → <code>chrome://extensions</code></li>
+          <li>Enable <em>Developer mode</em></li>
+          <li>Click <em>Load unpacked</em> and select the folder</li>
+        </ol>
+        <a class="download-btn" href="https://github.com/octogene/deezer-bpm/releases/latest">
+          ↓ Download .zip
+        </a>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      MIT License &nbsp;·&nbsp;
+      <a href="https://github.com/octogene/deezer-bpm">Source on GitHub</a> &nbsp;·&nbsp;
+      BPM data from the <a href="https://developers.deezer.com/api">Deezer API</a>
+    </p>
+  </footer>
+
+</body>
+</html>
