@@ -41,12 +41,19 @@ jobs:
           AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
           AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
         run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$VERSION" =~ -(alpha|beta|rc) ]]; then
+            CHANNEL="unlisted"
+          else
+            CHANNEL="listed"
+          fi
+          echo "Signing as $CHANNEL (tag: $GITHUB_REF_NAME)"
           web-ext sign \
             --source-dir . \
             --artifacts-dir web-ext-artifacts \
             --api-key  "$AMO_API_KEY" \
             --api-secret "$AMO_API_SECRET" \
-            --channel unlisted
+            --channel "$CHANNEL"
 
       - name: Collect artifacts
         id: artifacts
