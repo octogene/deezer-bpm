@@ -228,6 +228,7 @@
   let playlistModeEnabled = true;
   let playlistObserver    = null;
   let currentTrackIds     = null; // ordered array of track IDs for the current page
+  let currentTrackMap     = null; // Map: "title\0artistId" → trackId (for sorted views)
   let currentPageUrl      = null; // pathname for which currentTrackIds was fetched
   let isLoadingTrackIds   = false; // prevents concurrent loads of the same page
 
@@ -248,20 +249,60 @@
   // ── Deezer API – fetch ordered track IDs for current playlist/album ───────
   // We need the track IDs in the same order as they appear on the page so we
   // can map each row's aria-rowindex (1-based position) to a track ID.
+  // We also build lookup maps so we can re-identify tracks after the user sorts
+  // the list by a column header.
+
+  function normalizeTrackKeyPart(value) {
+    return String(value)
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ')
+      .replace(/[’']/g, "'")
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function makeTrackKey(title, artistId, albumValue) {
+    return [
+      normalizeTrackKeyPart(title),
+      normalizeTrackKeyPart(artistId),
+      normalizeTrackKeyPart(albumValue),
+    ].join('\0');
+  }
 
   // Fetches all pages of a paginated Deezer API list endpoint and returns an
-  // array of track IDs as strings.
+  // array of track IDs and lookup maps.
   async function fetchAllTrackIds(url) {
     const ids = [];
+    const mapByArtistAlbumId = new Map();
+    const mapByArtistAlbumTitle = new Map();
+    const mapByArtistOnly = new Map(); // normalized "title\0artistId" → trackId
     let next = url;
     while (next) {
       const resp = await fetch(next);
       if (!resp.ok) break;
       const data = await resp.json();
-      for (const t of (data.data || [])) ids.push(String(t.id));
-      next = data.next || null; // Deezer API paginates via a `next` URL field
+      for (const t of (data.data || [])) {
+        const id = String(t.id);
+        ids.push(id);
+
+        if (t.title != null && t.artist?.id != null) {
+          mapByArtistOnly.set(
+            `${normalizeTrackKeyPart(t.title)}\0${normalizeTrackKeyPart(t.artist.id)}`,
+            id
+          );
+
+          if (t.album?.id != null) {
+            mapByArtistAlbumId.set(makeTrackKey(t.title, t.artist.id, t.album.id), id);
+          }
+          if (t.album?.title != null) {
+            mapByArtistAlbumTitle.set(makeTrackKey(t.title, t.artist.id, t.album.title), id);
+          }
+        }
+      }
+      next = data.next || null;
     }
-    return ids;
+    return { ids, mapByArtistAlbumId, mapByArtistAlbumTitle, mapByArtistOnly };
   }
 
   // Inspect the current URL and fetch the track list for the playlist or album.
@@ -270,17 +311,67 @@
     const path = location.pathname;
     const playlistMatch = path.match(/\/playlist\/(\d+)/);
     if (playlistMatch) {
-      return fetchAllTrackIds(
+      const { ids, mapByArtistAlbumId, mapByArtistAlbumTitle, mapByArtistOnly } = await fetchAllTrackIds(
         `https://api.deezer.com/playlist/${playlistMatch[1]}/tracks?limit=200`
       );
+      currentTrackMap = {
+        byId: mapByArtistAlbumId,
+        byTitle: mapByArtistAlbumTitle,
+        byArtistOnly: mapByArtistOnly,
+      };
+      return ids;
     }
     const albumMatch = path.match(/\/album\/(\d+)/);
     if (albumMatch) {
-      return fetchAllTrackIds(
+      const { ids, mapByArtistAlbumId, mapByArtistAlbumTitle, mapByArtistOnly } = await fetchAllTrackIds(
         `https://api.deezer.com/album/${albumMatch[1]}/tracks?limit=200`
       );
+      currentTrackMap = {
+        byId: mapByArtistAlbumId,
+        byTitle: mapByArtistAlbumTitle,
+        byArtistOnly: mapByArtistOnly,
+      };
+      return ids;
     }
     return null;
+  }
+
+  // Resolve the track ID for a row. Tries the most specific keys first, then
+  // falls back to less specific matches, and finally to row order.
+  function resolveTrackId(row, rowIndex) {
+    if (currentTrackMap) {
+      const titleEl  = row.querySelector('[data-testid="title"]');
+      const artistEl = row.querySelector('[data-testid="artist"]');
+      const albumEl  = row.querySelector('[data-testid="album"]');
+
+      if (titleEl && artistEl) {
+        const title = titleEl.textContent.trim();
+        const artistId = (artistEl.getAttribute('href') || '').match(/\/artist\/(\d+)/)?.[1];
+
+        if (artistId) {
+          if (albumEl) {
+            const albumId = (albumEl.getAttribute('href') || '').match(/\/album\/(\d+)/)?.[1];
+            if (albumId) {
+              const id = currentTrackMap.byId.get(makeTrackKey(title, artistId, albumId));
+              if (id) return id;
+            }
+          }
+
+          const albumTitle = albumEl?.textContent?.trim();
+          if (albumTitle) {
+            const id = currentTrackMap.byTitle.get(makeTrackKey(title, artistId, albumTitle));
+            if (id) return id;
+          }
+
+          const id = currentTrackMap.byArtistOnly.get(
+            `${normalizeTrackKeyPart(title)}\0${normalizeTrackKeyPart(artistId)}`
+          );
+          if (id) return id;
+        }
+      }
+    }
+
+    return currentTrackIds?.[rowIndex] ?? null;
   }
 
   // ── Playlist injection ────────────────────────────────────────────────────
@@ -309,23 +400,37 @@
 
   // Inject BPM placeholders into all currently visible rows that haven't been
   // processed yet. The actual BPM value is filled in asynchronously once fetched.
+  // Also handles in-place row recycling (e.g. after a column-header sort) by
+  // detecting when a row's track has changed and refreshing its BPM span.
   function injectPlaceholders() {
     // Guard: don't inject stale data if the page has already changed.
     if (!currentTrackIds || currentPageUrl !== location.pathname) return;
 
     for (const row of document.querySelectorAll('[role="row"][aria-rowindex]')) {
-      if (row.getAttribute(INJECTED_ATTR)) continue; // already handled
-
       // aria-rowindex is 1-based; map it to our 0-based currentTrackIds array.
       const rowIndex = parseInt(row.getAttribute('aria-rowindex'), 10) - 1;
-      const trackId  = currentTrackIds[rowIndex];
+      const trackId  = resolveTrackId(row, rowIndex);
       if (!trackId) continue;
+
+      // If the row was already injected, check whether the track is still the
+      // same. After a column-header sort Deezer may recycle DOM rows in-place
+      // (updating their content without removing them), so aria-rowindex stays
+      // the same but points to a different track. Detect this by comparing the
+      // track ID we stored on the span against the newly resolved one.
+      if (row.getAttribute(INJECTED_ATTR)) {
+        const existing = row.querySelector(`.${INLINE_CLASS}`);
+        if (existing?.dataset.dbpmTrack === trackId) continue; // same track — nothing to do
+        // Track changed: remove the stale span and fall through to re-inject.
+        existing?.remove();
+        row.removeAttribute(INJECTED_ATTR);
+      }
 
       // Mark the row so we don't process it again when the observer fires.
       row.setAttribute(INJECTED_ATTR, '1');
 
       const span = document.createElement('span');
       span.className = INLINE_CLASS;
+      span.dataset.dbpmTrack = trackId; // stored for stale-detection on re-renders
       span.textContent = '…'; // placeholder shown while the BPM is being fetched
 
       const durationCell = findDurationCell(row);
@@ -334,7 +439,7 @@
 
       // Fetch BPM asynchronously and update the span when ready.
       fetchBpmCached(trackId).then(bpm => {
-        if (!span.isConnected) return; // row was removed from the DOM while we waited
+        if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
         span.textContent = bpm != null ? String(bpm) : '?';
         if (bpm != null) span.classList.add(`${INLINE_CLASS}--loaded`); // triggers styling change
       }).catch(err => {
@@ -359,6 +464,7 @@
       isLoadingTrackIds = true;
       currentPageUrl    = targetUrl; // set early so other callers see the new URL
       currentTrackIds   = null;
+      currentTrackMap   = null;
       try {
         currentTrackIds = await loadTrackIdsForCurrentPage();
       } finally {
@@ -370,6 +476,7 @@
       if (location.pathname !== targetUrl) {
         currentPageUrl  = null;
         currentTrackIds = null;
+        currentTrackMap = null;
         setTimeout(injectPlaylistBpms, 100);
         return;
       }
@@ -474,9 +581,14 @@
   // (updating them in-place) instead of removing and re-adding them. In that case
   // the MutationObserver never fires for new rows, and URL changes go undetected.
   // This interval catches those cases within 2.5 seconds.
+  // It also re-checks existing rows after a column-header sort, where Deezer
+  // may recycle rows with new track content without triggering the observer.
   setInterval(() => {
-    if (playlistModeEnabled && !isLoadingTrackIds && currentPageUrl !== location.pathname) {
+    if (!playlistModeEnabled || isLoadingTrackIds) return;
+    if (currentPageUrl !== location.pathname) {
       injectPlaylistBpms();
+    } else if (currentTrackIds) {
+      injectPlaceholders(); // re-check rows in case they were sorted in-place
     }
   }, 2500);
 
