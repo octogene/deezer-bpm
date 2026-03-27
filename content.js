@@ -32,10 +32,9 @@
   // enable verbose logging. Persists across reloads until manually removed.
   //   enable:  localStorage.setItem('deezerBpmDebug', '1')
   //   disable: localStorage.removeItem('deezerBpmDebug')
-  function logDebugInfo(...args) {
-    if (localStorage.getItem('deezerBpmDebug') === '1')
-      console.log('[Deezer BPM]', ...args);
-  }
+  const logDebugInfo = localStorage.getItem('deezerBpmDebug') === '1'
+      ? console.log.bind(console, '[Deezer BPM]')
+      : () => {};
 
   // Read the persisted cache from extension storage into the in-memory Map.
   // Called once at startup, before any fetches happen.
