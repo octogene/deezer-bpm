@@ -418,6 +418,9 @@
       // Skip rows inside the play-queue modal — handled separately by injectQueueBpms().
       if (row.closest('.player-queuelist')) continue;
 
+      // Skip rows that don't have a title (e.g. "Add to queue").'
+      if (!row.querySelector('[data-testid="title"]')) continue;
+
       // aria-rowindex is 1-based; map it to our 0-based currentTrackIds array.
       const rowIndex = parseInt(row.getAttribute('aria-rowindex'), 10) - 1;
       const trackId  = resolveTrackId(row, rowIndex);
