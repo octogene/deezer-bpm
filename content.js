@@ -152,58 +152,53 @@
   // or from DOM elements in the player bar.
 
   let currentTrackId   = null; // track ID shown on the badge right now
-  let playerController = null; // AbortController for the title-search fallback fetch
+  let playerController = null; // AbortController for the in-flight album fetch
 
-  // Try to extract the playing track's ID without any network request.
-  // 1. If the URL is a /track/ID page, use that ID directly.
-  // 2. Otherwise, look for anchor tags in known player-bar selectors whose
-  //    href contains /track/ID.
-  function detectTrackId() {
-    const urlMatch = location.pathname.match(/\/track\/(\d+)/);
-    if (urlMatch) return urlMatch[1];
+  // Extract the playing track ID from the miniplayer by:
+  // 1. Reading the track title and album link from data-testid="miniplayer_container"
+  // 2. Fetching the album's track list from the Deezer API
+  // 3. Matching the track title against the list to find the exact track ID
+  // This guarantees the same ID as the playlist injection uses, so BPMs always agree.
+  async function detectTrackIdFromPlayer() {
+    const container = document.querySelector('[data-testid="miniplayer_container"]');
+    if (!container) return null;
 
-    const playerSelectors = [
-      '[data-testid="player_track_title"] a',
-      '[class*="PlayerTrackTitle"] a',
-      '[class*="player-track-title"] a',
-      '.track-title a',
-    ];
-    for (const sel of playerSelectors) {
-      for (const el of document.querySelectorAll(sel)) {
-        const m = (el.getAttribute('href') || '').match(/\/track\/(\d+)/);
-        if (m) return m[1];
-      }
-    }
-    return null;
-  }
+    // The single item_title in the player contains an anchor whose text is the
+    // track title and whose href contains the album ID.
+    const anchor     = container.querySelector('[data-testid="item_title"] a[href*="/album/"]');
+    if (!anchor) return null;
 
-  // Fallback: search the Deezer API using the page title (which usually contains
-  // "Artist – Track"). Used when detectTrackId() finds nothing because Deezer's
-  // player bar links don't expose /track/ID hrefs.
-  async function searchTrackByTitle() {
-    const raw = document.title.replace(/[-–|]?\s*Deezer\s*$/i, '').trim();
-    if (!raw) return null;
-    // Abort any previous in-flight search so we don't act on stale results.
+    const trackTitle = normalizeTrackKeyPart(anchor.textContent.trim());
+    const albumMatch = anchor.getAttribute('href').match(/\/album\/(\d+)/);
+    if (!albumMatch) return null;
+    const albumId = albumMatch[1];
+
+    // Abort any previous in-flight fetch so we don't act on stale results.
     if (playerController) playerController.abort();
     playerController = new AbortController();
-    const resp = await fetch(
-      `https://api.deezer.com/search?q=${encodeURIComponent(raw)}&limit=1`,
-      { signal: playerController.signal }
-    );
-    if (!resp.ok) return null;
-    const data = await resp.json();
-    const id = data.data?.[0]?.id;
-    return id != null ? String(id) : null;
+
+    try {
+      const resp = await fetch(
+        `https://api.deezer.com/album/${albumId}/tracks?limit=200`,
+        { signal: playerController.signal }
+      );
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      const match = (data.data || []).find(
+        t => normalizeTrackKeyPart(t.title) === trackTitle
+      );
+      return match ? String(match.id) : null;
+    } catch (e) {
+      if (e.name !== 'AbortError') console.warn('[Deezer BPM] album fetch error:', e);
+      return null;
+    }
   }
 
   // Refresh the floating badge for the currently playing track.
   // Called whenever the title or URL changes.
   async function updatePlayerBadge() {
-    let trackId = detectTrackId();
-    if (!trackId) {
-      setBadgeValue('…'); // show loading state while we search
-      trackId = await searchTrackByTitle().catch(() => null);
-    }
+    setBadgeValue('…');
+    const trackId = await detectTrackIdFromPlayer().catch(() => null);
     if (!trackId) { setBadgeValue('–'); currentTrackId = null; return; }
     if (trackId === currentTrackId) return; // nothing changed, skip
     currentTrackId = trackId;
@@ -212,7 +207,6 @@
       const bpm = await fetchBpmCached(trackId);
       setBadgeValue(bpm ?? 'N/A', bpm != null);
     } catch (err) {
-      // AbortError is expected when a new search supersedes the old one — ignore it.
       if (err.name !== 'AbortError') { console.warn('[Deezer BPM]', err); setBadgeValue('–'); }
     }
   }
