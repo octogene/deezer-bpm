@@ -179,6 +179,16 @@
       transition: background .2s;
     }
     .download-btn:hover { background: rgba(162,56,255,.25); text-decoration: none; }
+    .download-btn.soon {
+      opacity: .45;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+    .download-btn .soon-tag {
+      font-size: .75rem;
+      font-weight: 500;
+      color: var(--muted);
+    }
 
     /* ── Footer ── */
     footer {
@@ -202,8 +212,11 @@
     <h1>Deezer <span>BPM</span></h1>
     <p class="tagline">See the BPM of every track you play on Deezer — right in the browser, no account needed.</p>
     <div class="cta-row">
-      <a class="btn btn-primary" href="https://github.com/octogene/deezer-bpm/releases/latest">
-        ↓ Download latest release
+      <a class="btn btn-primary soon" aria-disabled="true">
+        🦊 Firefox Add-ons <span style="font-size:.8rem;opacity:.7">— Soon…</span>
+      </a>
+      <a class="btn btn-secondary soon" aria-disabled="true">
+        🌐 Chrome Web Store <span style="font-size:.8rem;opacity:.7">— Soon…</span>
       </a>
       <a class="btn btn-secondary" href="https://github.com/octogene/deezer-bpm">
         GitHub →
@@ -250,8 +263,8 @@
           <li>Gear icon → <em>Install Add-on From File…</em></li>
           <li>Select the downloaded <code>.xpi</code></li>
         </ol>
-        <a class="download-btn" href="https://github.com/octogene/deezer-bpm/releases/latest">
-          ↓ Download .xpi
+        <a class="download-btn soon" aria-disabled="true">
+          🦊 Firefox Add-ons <span class="soon-tag">— Soon…</span>
         </a>
       </div>
 
@@ -263,8 +276,8 @@
           <li>Enable <em>Developer mode</em></li>
           <li>Click <em>Load unpacked</em> and select the folder</li>
         </ol>
-        <a class="download-btn" href="https://github.com/octogene/deezer-bpm/releases/latest">
-          ↓ Download .zip
+        <a class="download-btn soon" aria-disabled="true">
+          🌐 Chrome Web Store <span class="soon-tag">— Soon…</span>
         </a>
       </div>
 
