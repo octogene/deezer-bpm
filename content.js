@@ -245,6 +245,45 @@
   let isPrivatePlaylist   = false; // true when the API returned OAuthException (private playlist)
   const queueTrackCache   = new Map(); // "title\0artistName" → trackId, avoids re-searching queue rows
 
+  // Entry point for injecting BPMs into the current page.
+  // Handles the case where the page URL changed since the last call (navigated
+  // to a different playlist/album) by fetching a fresh track list first.
+  async function injectPlaylistBpms() {
+    if (isLoadingTrackIds) return; // a load is already in progress — don't start another
+
+    if (currentPageUrl !== location.pathname) {
+      // The user navigated to a new page. Clean up any tags from the previous page
+      // before loading the new track list.
+      removePlaylistBpms();
+
+      const targetUrl   = location.pathname;
+      isLoadingTrackIds = true;
+      currentPageUrl    = targetUrl; // set early so other callers see the new URL
+      currentTrackIds   = null;
+      currentTrackMap   = null;
+      isPrivatePlaylist = false;
+      try {
+        currentTrackIds = await loadTrackIdsForCurrentPage();
+      } finally {
+        isLoadingTrackIds = false;
+      }
+
+      // If the URL changed *again* while we were awaiting the API response,
+      // our data is already stale. Reset and schedule a fresh attempt.
+      if (location.pathname !== targetUrl) {
+        currentPageUrl  = null;
+        currentTrackIds = null;
+        currentTrackMap = null;
+        setTimeout(injectPlaylistBpms, 100);
+        return;
+      }
+    }
+
+    if (!currentTrackIds || (currentTrackIds.length === 0 && isPrivatePlaylist)) return; // not a playlist/album page
+
+    injectPlaceholders();
+  }
+
   // Enable or disable playlist mode, persisting the preference to localStorage.
   function setPlaylistMode(enabled) {
     playlistModeEnabled = enabled;
@@ -457,45 +496,6 @@
 
       injectBpmSpanIntoRow(row, trackId);
     }
-  }
-
-  // Entry point for injecting BPMs into the current page.
-  // Handles the case where the page URL changed since the last call (navigated
-  // to a different playlist/album) by fetching a fresh track list first.
-  async function injectPlaylistBpms() {
-    if (isLoadingTrackIds) return; // a load is already in progress — don't start another
-
-    if (currentPageUrl !== location.pathname) {
-      // The user navigated to a new page. Clean up any tags from the previous page
-      // before loading the new track list.
-      removePlaylistBpms();
-
-      const targetUrl   = location.pathname;
-      isLoadingTrackIds = true;
-      currentPageUrl    = targetUrl; // set early so other callers see the new URL
-      currentTrackIds   = null;
-      currentTrackMap   = null;
-      isPrivatePlaylist = false;
-      try {
-        currentTrackIds = await loadTrackIdsForCurrentPage();
-      } finally {
-        isLoadingTrackIds = false;
-      }
-
-      // If the URL changed *again* while we were awaiting the API response,
-      // our data is already stale. Reset and schedule a fresh attempt.
-      if (location.pathname !== targetUrl) {
-        currentPageUrl  = null;
-        currentTrackIds = null;
-        currentTrackMap = null;
-        setTimeout(injectPlaylistBpms, 100);
-        return;
-      }
-    }
-
-    if (!currentTrackIds || (currentTrackIds.length === 0 && isPrivatePlaylist)) return; // not a playlist/album page
-
-    injectPlaceholders();
   }
 
   // Remove all BPM tags we injected and clear the "already processed" markers
