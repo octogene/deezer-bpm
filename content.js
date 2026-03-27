@@ -328,41 +328,27 @@
   async function loadTrackIdsForCurrentPage() {
     const path = location.pathname;
     const playlistMatch = path.match(/\/playlist\/(\d+)/);
-    if (playlistMatch) {
-      try {
-        const { ids, mapByArtistAlbumId, mapByArtistAlbumTitle, mapByArtistOnly } = await fetchAllTrackIds(
-            `https://api.deezer.com/playlist/${playlistMatch[1]}/tracks?limit=200`
-        );
-        currentTrackMap = {
-          byId: mapByArtistAlbumId,
-          byTitle: mapByArtistAlbumTitle,
-          byArtistOnly: mapByArtistOnly,
-        };
-        logDebugInfo('playlist track IDs loaded:', ids.length);
-        return ids;
-      } catch (e) {
-        if (e.type === 'OAuthException') {
-          logDebugInfo('Private playlist detected, falling back to DOM search');
-          isPrivatePlaylist = true;
-          return [];
-        }
-        throw e;
-      }
-    }
     const albumMatch = path.match(/\/album\/(\d+)/);
-    if (albumMatch) {
-      const { ids, mapByArtistAlbumId, mapByArtistAlbumTitle, mapByArtistOnly } = await fetchAllTrackIds(
-        `https://api.deezer.com/album/${albumMatch[1]}/tracks?limit=200`
-      );
-      currentTrackMap = {
-        byId: mapByArtistAlbumId,
-        byTitle: mapByArtistAlbumTitle,
-        byArtistOnly: mapByArtistOnly,
-      };
-      logDebugInfo('album track IDs loaded:', ids.length);
+
+    let apiUrl  = null;
+    let logLabel = null;
+    if (playlistMatch) { apiUrl = `https://api.deezer.com/playlist/${playlistMatch[1]}/tracks?limit=200`; logLabel = 'playlist'; }
+    else if (albumMatch) { apiUrl = `https://api.deezer.com/album/${albumMatch[1]}/tracks?limit=200`;    logLabel = 'album'; }
+    if (!apiUrl) return null;
+
+    try {
+      const { ids, mapByArtistAlbumId, mapByArtistAlbumTitle, mapByArtistOnly } = await fetchAllTrackIds(apiUrl);
+      currentTrackMap = { byId: mapByArtistAlbumId, byTitle: mapByArtistAlbumTitle, byArtistOnly: mapByArtistOnly };
+      logDebugInfo(`${logLabel} track IDs loaded:`, ids.length);
       return ids;
+    } catch (e) {
+      if (e.type === 'OAuthException') {
+        logDebugInfo('Private playlist detected, falling back to DOM search');
+        isPrivatePlaylist = true;
+        return [];
+      }
+      throw e;
     }
-    return null;
   }
 
   // Resolve the track ID for a row. Tries the most specific keys first, then
@@ -573,6 +559,14 @@
     durationHeader.before(bpmHeader);
   }
 
+  function getRowKey(row) {
+    const titleEl  = row.querySelector('[data-testid="title"]');
+    const artistEl = row.querySelector('[data-testid="artist"]');
+    return titleEl && artistEl
+        ? `${normalizeTrackKeyPart(titleEl.textContent.trim())}\0${normalizeTrackKeyPart(artistEl.textContent.trim())}`
+        : null;
+  }
+
   // Resolve a track ID for a queue row purely from its DOM content.
   // Tries the currentTrackMap first (free, no network), then falls back to a
   // Deezer API search using the title and artist name visible in the row.
@@ -588,7 +582,7 @@
 
     // Check the in-memory queue cache first — populated after the first API search
     // so recycled rows with the same content are resolved instantly.
-    const rowKey = `${normalizeTrackKeyPart(title)}\0${normalizeTrackKeyPart(artistName)}`;
+    const rowKey = getRowKey(row);
     if (queueTrackCache.has(rowKey)) return queueTrackCache.get(rowKey);
 
     // Try the currentTrackMap next (free, no network needed).
@@ -670,11 +664,7 @@
         if (existing) {
           // Check if the row was recycled in-place: compare the stored title+artist
           // key on the span against what is currently in the DOM.
-          const titleEl  = row.querySelector('[data-testid="title"]');
-          const artistEl = row.querySelector('[data-testid="artist"]');
-          const currentKey = titleEl && artistEl
-            ? `${normalizeTrackKeyPart(titleEl.textContent.trim())}\0${normalizeTrackKeyPart(artistEl.textContent.trim())}`
-            : null;
+          const currentKey = getRowKey(row);
           if (existing.dataset.dbpmRowKey === currentKey) continue; // same content — nothing to do
           // Content changed: row was recycled. Remove stale span and re-inject.
           existing.remove();
@@ -699,13 +689,9 @@
       row.setAttribute(INJECTED_ATTR, '1');
 
       // Compute the row key again (post-await) to store on the span for staleness checks.
-      const titleEl  = row.querySelector('[data-testid="title"]');
-      const artistEl = row.querySelector('[data-testid="artist"]');
-      const rowKey = titleEl && artistEl
-        ? `${normalizeTrackKeyPart(titleEl.textContent.trim())}\0${normalizeTrackKeyPart(artistEl.textContent.trim())}`
-        : trackId;
+      const rowKey = getRowKey(row) ?? trackId;
 
-      injectBpmSpanIntoRow(row, trackId);
+      injectBpmSpanIntoRow(row, trackId, { rowKey, errorText: 'N/A' });
     }
   }
 
