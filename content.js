@@ -27,6 +27,16 @@
   const CACHE_STORAGE_KEY = 'deezerBpmCache';
   const MAX_CACHE_SIZE    = 5000; // cap to avoid filling up extension storage
 
+  // ── Debug logging ─────────────────────────────────────────────────────────
+  // Set localStorage key 'deezerBpmDebug' to '1' in the browser console to
+  // enable verbose logging. Persists across reloads until manually removed.
+  //   enable:  localStorage.setItem('deezerBpmDebug', '1')
+  //   disable: localStorage.removeItem('deezerBpmDebug')
+  function logDebugInfo(...args) {
+    if (localStorage.getItem('deezerBpmDebug') === '1')
+      console.log('[Deezer BPM]', ...args);
+  }
+
   // Read the persisted cache from extension storage into the in-memory Map.
   // Called once at startup, before any fetches happen.
   async function loadPersistedCache() {
@@ -95,6 +105,7 @@
         const resp = await fetch(`https://api.deezer.com/track/${id}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
+        logDebugInfo('track BPM:', data);
         // Deezer reports 0 for tracks with no BPM data; treat that as "unknown".
         const bpm  = (typeof data.bpm === 'number' && data.bpm > 0) ? Math.round(data.bpm) : null;
         bpmCache.set(id, bpm);
@@ -169,6 +180,7 @@
     if (!anchor) return null;
 
     const trackTitle = normalizeTrackKeyPart(anchor.textContent.trim());
+    logDebugInfo('player track title:', trackTitle);
     const albumMatch = anchor.getAttribute('href').match(/\/album\/(\d+)/);
     if (!albumMatch) return null;
     const albumId = albumMatch[1];
@@ -184,9 +196,11 @@
       );
       if (!resp.ok) return null;
       const data = await resp.json();
+      logDebugInfo('album tracks:', data);
       const match = (data.data || []).find(
         t => normalizeTrackKeyPart(t.title) === trackTitle
       );
+      logDebugInfo('album track match:', match);
       return match ? String(match.id) : null;
     } catch (e) {
       if (e.name !== 'AbortError') console.warn('[Deezer BPM] album fetch error:', e);
@@ -312,6 +326,7 @@
         byTitle: mapByArtistAlbumTitle,
         byArtistOnly: mapByArtistOnly,
       };
+      logDebugInfo('playlist track IDs loaded:', ids.length);
       return ids;
     }
     const albumMatch = path.match(/\/album\/(\d+)/);
@@ -324,6 +339,7 @@
         byTitle: mapByArtistAlbumTitle,
         byArtistOnly: mapByArtistOnly,
       };
+      logDebugInfo('album track IDs loaded:', ids.length);
       return ids;
     }
     return null;
