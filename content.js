@@ -214,15 +214,19 @@
 
   // Refresh the floating badge for the currently playing track.
   // Called whenever the title or URL changes.
+  let badgeUpdateId = 0; // incremented on each call; lets stale calls detect they've been superseded
   async function updatePlayerBadge() {
+    const callId = ++badgeUpdateId;
     setBadgeValue('…');
     const trackId = await detectTrackIdFromPlayer().catch(() => null);
+    if (callId !== badgeUpdateId) return; // a newer call has started — discard this result
     if (!trackId) { setBadgeValue('–'); currentTrackId = null; return; }
     if (trackId === currentTrackId) return; // nothing changed, skip
     currentTrackId = trackId;
     setBadgeValue('…');
     try {
       const bpm = await fetchBpmCached(trackId);
+      if (callId !== badgeUpdateId) return; // superseded while waiting for BPM
       logDebugInfo('Fetched track BPM:', bpm);
       setBadgeValue(bpm ?? 'N/A', bpm != null);
     } catch (err) {
@@ -725,22 +729,32 @@
     urlChangeTimer = setTimeout(onUrlChange, 150);
   }
 
-  // Watch the <title> element. Deezer updates it whenever the playing track or
-  // the current page changes, making it a reliable proxy for both events.
-  const miniplayerEl = document.querySelector('[data-testid="miniplayer_container"]');
-  if (miniplayerEl) {
+  function setupMiniplayerObserver(miniplayerEl) {
     let lastPlayerTitle = null;
     new MutationObserver(() => {
       const anchor = miniplayerEl.querySelector('[data-testid="item_title"] a[href*="/album/"]');
       const title   = anchor?.textContent ?? null;
-      // Only act when the album link actually changes — this filters out unrelated
-      // subtree mutations (e.g. playback progress, volume, etc.).
       if (title === lastPlayerTitle) return;
-      logDebugInfo("title changed", lastPlayerTitle, title)
+      logDebugInfo("title changed", lastPlayerTitle, title);
       lastPlayerTitle = title;
       currentTrackId = null;
       updatePlayerBadge();
     }).observe(miniplayerEl, { childList: true, subtree: true, characterData: true });
+  }
+
+  // Make sure the mini player is loaded before setting up the mutation observer
+  const miniplayerEl = document.querySelector('[data-testid="miniplayer_container"]');
+  if (miniplayerEl) {
+    setupMiniplayerObserver(miniplayerEl);
+  } else {
+    const waitForMiniplayer = new MutationObserver(() => {
+      const el = document.querySelector('[data-testid="miniplayer_container"]');
+      if (!el) return;
+      waitForMiniplayer.disconnect();
+      setupMiniplayerObserver(el);
+      updatePlayerBadge();
+    });
+    waitForMiniplayer.observe(document.body, { childList: true, subtree: true });
   }
 
   // Watch the <title> element only for URL/navigation changes (not for badge updates).
