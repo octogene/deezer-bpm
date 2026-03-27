@@ -241,6 +241,7 @@
   let currentTrackMap     = null; // Map: "title\0artistId" → trackId (for sorted views)
   let currentPageUrl      = null; // pathname for which currentTrackIds was fetched
   let isLoadingTrackIds   = false; // prevents concurrent loads of the same page
+  let isPrivatePlaylist   = false; // true if the current playlist is private
   const queueTrackCache   = new Map(); // "title\0artistName" → trackId, avoids re-searching queue rows
 
   // Enable or disable playlist mode, persisting the preference to localStorage.
@@ -293,6 +294,11 @@
       const resp = await fetch(next);
       if (!resp.ok) break;
       const data = await resp.json();
+      if (data.error) {
+        logDebugInfo('Fetch error:', data.error);
+        if (data.error.type === 'OAuthException') throw Object.assign(new Error(data.error.message), { type: 'OAuthException' })
+        break;
+      }
       for (const t of (data.data || [])) {
         const id = String(t.id);
         ids.push(id);
@@ -322,16 +328,25 @@
     const path = location.pathname;
     const playlistMatch = path.match(/\/playlist\/(\d+)/);
     if (playlistMatch) {
-      const { ids, mapByArtistAlbumId, mapByArtistAlbumTitle, mapByArtistOnly } = await fetchAllTrackIds(
-        `https://api.deezer.com/playlist/${playlistMatch[1]}/tracks?limit=200`
-      );
-      currentTrackMap = {
-        byId: mapByArtistAlbumId,
-        byTitle: mapByArtistAlbumTitle,
-        byArtistOnly: mapByArtistOnly,
-      };
-      logDebugInfo('playlist track IDs loaded:', ids.length);
-      return ids;
+      try {
+        const { ids, mapByArtistAlbumId, mapByArtistAlbumTitle, mapByArtistOnly } = await fetchAllTrackIds(
+            `https://api.deezer.com/playlist/${playlistMatch[1]}/tracks?limit=200`
+        );
+        currentTrackMap = {
+          byId: mapByArtistAlbumId,
+          byTitle: mapByArtistAlbumTitle,
+          byArtistOnly: mapByArtistOnly,
+        };
+        logDebugInfo('playlist track IDs loaded:', ids.length);
+        return ids;
+      } catch (e) {
+        if (e.type === 'OAuthException') {
+          logDebugInfo('Private playlist detected, falling back to DOM search');
+          isPrivatePlaylist = true;
+          return [];
+        }
+        throw e;
+      }
     }
     const albumMatch = path.match(/\/album\/(\d+)/);
     if (albumMatch) {
@@ -429,7 +444,29 @@
       // aria-rowindex is 1-based; map it to our 0-based currentTrackIds array.
       const rowIndex = parseInt(row.getAttribute('aria-rowindex'), 10) - 1;
       const trackId  = resolveTrackId(row, rowIndex);
-      if (!trackId) continue;
+      if (!trackId) {
+        // Private playlist: the API gave us nothing, resolve via DOM search instead.
+        if (isPrivatePlaylist && !row.getAttribute(INJECTED_ATTR)) {
+          row.setAttribute(INJECTED_ATTR, 'pending');
+          resolveQueueRowTrackId(row).then(resolvedId => {
+            if (!resolvedId || !row.isConnected) { row.removeAttribute(INJECTED_ATTR); return; }
+            if (row.getAttribute(INJECTED_ATTR) !== 'pending') return; // already handled
+            row.setAttribute(INJECTED_ATTR, '1');
+            const span = document.createElement('span');
+            span.className = INLINE_CLASS;
+            span.dataset.dbpmTrack = resolvedId;
+            span.textContent = '…';
+            const durationCell = findDurationCell(row);
+            if (durationCell) durationCell.before(span);
+            else row.appendChild(span);
+            fetchBpmCached(resolvedId).then(renderBpmValue(span, resolvedId)).catch(err => {
+              console.warn('[Deezer BPM] fetch error for track', resolvedId, err);
+              if (span.isConnected) span.textContent = 'N/A';
+            });
+          });
+        }
+        continue;
+      }
 
       // If the row was already injected, check whether the track is still the
       // same. After a column-header sort Deezer may recycle DOM rows in-place
@@ -480,6 +517,7 @@
       currentPageUrl    = targetUrl; // set early so other callers see the new URL
       currentTrackIds   = null;
       currentTrackMap   = null;
+      isPrivatePlaylist = false;
       try {
         currentTrackIds = await loadTrackIdsForCurrentPage();
       } finally {
@@ -497,7 +535,7 @@
       }
     }
 
-    if (!currentTrackIds || currentTrackIds.length === 0) return; // not a playlist/album page
+    if (!currentTrackIds || (currentTrackIds.length === 0 && isPrivatePlaylist)) return; // not a playlist/album page
 
     injectPlaceholders();
   }
