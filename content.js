@@ -3,10 +3,11 @@
 
   // DOM identifiers used to find/mark our own elements.
   // Keeping them as constants prevents typos and makes them easy to change.
-  const BADGE_ID      = 'deezer-bpm-badge';   // id of the floating badge div
-  const INLINE_CLASS  = 'dbpm-inline';         // class on each per-row BPM span
-  const INJECTED_ATTR = 'data-dbpm-injected';  // attribute we set on rows we already processed
-  const STORAGE_KEY   = 'deezerBpmPlaylistMode'; // localStorage key for playlist mode preference
+  const BADGE_ID        = 'deezer-bpm-badge';   // id of the floating badge div
+  const INLINE_CLASS    = 'dbpm-inline';         // class on each per-row BPM span
+  const HEADER_CLASS    = 'dbpm-header';         // class on the injected BPM column header
+  const INJECTED_ATTR   = 'data-dbpm-injected';  // attribute we set on rows we already processed
+  const STORAGE_KEY     = 'deezerBpmPlaylistMode'; // localStorage key for playlist mode preference
 
   // ── Persistent BPM cache ─────────────────────────────────────────────────
   // We cache BPM values so we never fetch the same track twice, even across
@@ -241,7 +242,7 @@
   let currentTrackMap     = null; // Map: "title\0artistId" → trackId (for sorted views)
   let currentPageUrl      = null; // pathname for which currentTrackIds was fetched
   let isLoadingTrackIds   = false; // prevents concurrent loads of the same page
-  let isPrivatePlaylist   = false; // true if the current playlist is private
+  let isPrivatePlaylist   = false; // true when the API returned OAuthException (private playlist)
   const queueTrackCache   = new Map(); // "title\0artistName" → trackId, avoids re-searching queue rows
 
   // Enable or disable playlist mode, persisting the preference to localStorage.
@@ -434,6 +435,9 @@
     // Guard: don't inject stale data if the page has already changed.
     if (!currentTrackIds || currentPageUrl !== location.pathname) return;
 
+    // Inject the BPM column header if not already present.
+    injectColumnHeader();
+
     for (const row of document.querySelectorAll('[role="row"][aria-rowindex]')) {
       // Skip rows inside the play-queue modal — handled separately by injectQueueBpms().
       if (row.closest('.player-queuelist')) continue;
@@ -544,7 +548,52 @@
   // so they will be re-injected if playlist mode is turned back on.
   function removePlaylistBpms() {
     document.querySelectorAll(`.${INLINE_CLASS}`).forEach(el => el.remove());
+    document.querySelectorAll(`.${HEADER_CLASS}`).forEach(el => el.remove());
     document.querySelectorAll(`[${INJECTED_ATTR}]`).forEach(el => el.removeAttribute(INJECTED_ATTR));
+  }
+
+  // Inject a "BPM" columnheader into the playlist header row, positioned just
+  // before the duration header. Idempotent — does nothing if already injected.
+  function injectColumnHeader() {
+    // Already injected — nothing to do.
+    if (document.querySelector(`.${HEADER_CLASS}`)) return;
+
+    // Find the duration columnheader: the one whose text matches a time pattern
+    // (e.g. "DURÉE", "DURATION") or that contains a clock/duration icon.
+    // As a fallback we match the last columnheader in the row.
+    const headers = [...document.querySelectorAll('[role="columnheader"]')];
+    if (!headers.length) return;
+
+    // Use findDurationCell on a live data row to detect which column index
+    // holds the duration, then insert the BPM header before that column header.
+    let durationHeader = null;
+    const sampleRow = document.querySelector('[role="row"][aria-rowindex]');
+    if (sampleRow) {
+      const durationCell = findDurationCell(sampleRow);
+      if (durationCell) {
+        const colIndex = [...durationCell.parentElement.children].indexOf(durationCell);
+        logDebugInfo("Found duration cell column index ", colIndex)
+        if (colIndex >= 0 && colIndex < headers.length) {
+          durationHeader = headers[colIndex];
+        }
+      }
+    }
+    if (!durationHeader) return;
+
+    const bpmHeader = document.createElement('div');
+    bpmHeader.className = HEADER_CLASS;
+    bpmHeader.setAttribute('role', 'columnheader');
+
+    const btn = document.createElement('button');
+    btn.className = durationHeader.querySelector('button')?.className ?? '';
+    btn.type = 'button';
+    btn.disabled = true;
+    btn.setAttribute('aria-label', 'BPM');
+    btn.textContent = 'BPM';
+
+    bpmHeader.appendChild(btn);
+
+    durationHeader.before(bpmHeader);
   }
 
   // Resolve a track ID for a queue row purely from its DOM content.
