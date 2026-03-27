@@ -674,7 +674,6 @@
   // and from the popstate event (browser back/forward navigation).
 
   let lastUrl   = location.href;
-  let lastTitle = document.title;
   let urlChangeTimer = null;
 
   function onUrlChange() {
@@ -698,14 +697,26 @@
 
   // Watch the <title> element. Deezer updates it whenever the playing track or
   // the current page changes, making it a reliable proxy for both events.
+  const miniplayerEl = document.querySelector('[data-testid="miniplayer_container"]');
+  if (miniplayerEl) {
+    let lastPlayerTitle = null;
+    new MutationObserver(() => {
+      const anchor = miniplayerEl.querySelector('[data-testid="item_title"] a[href*="/album/"]');
+      const title   = anchor?.textContent ?? null;
+      // Only act when the album link actually changes — this filters out unrelated
+      // subtree mutations (e.g. playback progress, volume, etc.).
+      if (title === lastPlayerTitle) return;
+      logDebugInfo("title changed", lastPlayerTitle, title)
+      lastPlayerTitle = title;
+      currentTrackId = null;
+      updatePlayerBadge();
+    }).observe(miniplayerEl, { childList: true, subtree: true, characterData: true });
+  }
+
+  // Watch the <title> element only for URL/navigation changes (not for badge updates).
   const titleEl = document.querySelector('title');
   if (titleEl) {
     new MutationObserver(() => {
-      if (document.title !== lastTitle) {
-        lastTitle = document.title;
-        currentTrackId = null;
-        updatePlayerBadge(); // title change almost always means a new track is playing
-      }
       scheduleUrlChange();
     }).observe(titleEl, { childList: true });
   }
