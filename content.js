@@ -276,12 +276,39 @@
   }
 
   function makeTrackKey(title, artistId, albumValue) {
-    return [
-      normalizeTrackKeyPart(title),
-      normalizeTrackKeyPart(artistId),
-      normalizeTrackKeyPart(albumValue),
-    ].join('\0');
+    const parts = [normalizeTrackKeyPart(title), normalizeTrackKeyPart(artistId)];
+    if (albumValue != null) parts.push(normalizeTrackKeyPart(albumValue));
+    return parts.join('\0');
   }
+
+  // Look up a track ID from currentTrackMap using the DOM elements of a row.
+  // Returns the ID string on a hit, or null on a miss.
+  function lookupTrackInMap(row) {
+    if (!currentTrackMap) return null;
+    const titleEl  = row.querySelector('[data-testid="title"]');
+    const artistEl = row.querySelector('[data-testid="artist"]');
+    if (!titleEl || !artistEl) return null;
+    const title    = titleEl.textContent.trim();
+    const artistId = (artistEl.getAttribute('href') || '').match(/\/artist\/(\d+)/)?.[1];
+    if (!artistId) return null;
+    const albumEl = row.querySelector('[data-testid="album"]');
+    if (albumEl) {
+      const albumId = (albumEl.getAttribute('href') || '').match(/\/album\/(\d+)/)?.[1];
+      if (albumId) {
+        const id = currentTrackMap.byId.get(makeTrackKey(title, artistId, albumId));
+        if (id) return id;
+      }
+      const albumTitle = albumEl.textContent?.trim();
+      if (albumTitle) {
+        const id = currentTrackMap.byTitle.get(makeTrackKey(title, artistId, albumTitle));
+        if (id) return id;
+      }
+    }
+    return currentTrackMap.byArtistOnly.get(
+        `${normalizeTrackKeyPart(title)}\0${normalizeTrackKeyPart(artistId)}`
+    ) ?? null;
+  }
+
 
   // Fetches all pages of a paginated Deezer API list endpoint and returns an
   // array of track IDs and lookup maps.
@@ -305,11 +332,7 @@
         ids.push(id);
 
         if (t.title != null && t.artist?.id != null) {
-          mapByArtistOnly.set(
-            `${normalizeTrackKeyPart(t.title)}\0${normalizeTrackKeyPart(t.artist.id)}`,
-            id
-          );
-
+          mapByArtistOnly.set(makeTrackKey(t.title, t.artist.id), id);
           if (t.album?.id != null) {
             mapByArtistAlbumId.set(makeTrackKey(t.title, t.artist.id, t.album.id), id);
           }
@@ -354,39 +377,7 @@
   // Resolve the track ID for a row. Tries the most specific keys first, then
   // falls back to less specific matches, and finally to row order.
   function resolveTrackId(row, rowIndex) {
-    if (currentTrackMap) {
-      const titleEl  = row.querySelector('[data-testid="title"]');
-      const artistEl = row.querySelector('[data-testid="artist"]');
-      const albumEl  = row.querySelector('[data-testid="album"]');
-
-      if (titleEl && artistEl) {
-        const title = titleEl.textContent.trim();
-        const artistId = (artistEl.getAttribute('href') || '').match(/\/artist\/(\d+)/)?.[1];
-
-        if (artistId) {
-          if (albumEl) {
-            const albumId = (albumEl.getAttribute('href') || '').match(/\/album\/(\d+)/)?.[1];
-            if (albumId) {
-              const id = currentTrackMap.byId.get(makeTrackKey(title, artistId, albumId));
-              if (id) return id;
-            }
-          }
-
-          const albumTitle = albumEl?.textContent?.trim();
-          if (albumTitle) {
-            const id = currentTrackMap.byTitle.get(makeTrackKey(title, artistId, albumTitle));
-            if (id) return id;
-          }
-
-          const id = currentTrackMap.byArtistOnly.get(
-            `${normalizeTrackKeyPart(title)}\0${normalizeTrackKeyPart(artistId)}`
-          );
-          if (id) return id;
-        }
-      }
-    }
-
-    return currentTrackIds?.[rowIndex] ?? null;
+    return lookupTrackInMap(row) ?? currentTrackIds?.[rowIndex] ?? null;
   }
 
   // ── Playlist injection ────────────────────────────────────────────────────
@@ -510,8 +501,7 @@
   // Remove all BPM tags we injected and clear the "already processed" markers
   // so they will be re-injected if playlist mode is turned back on.
   function removePlaylistBpms() {
-    document.querySelectorAll(`.${INLINE_CLASS}`).forEach(el => el.remove());
-    document.querySelectorAll(`.${HEADER_CLASS}`).forEach(el => el.remove());
+    document.querySelectorAll(`.${INLINE_CLASS}, .${HEADER_CLASS}`).forEach(el => el.remove());
     document.querySelectorAll(`[${INJECTED_ATTR}]`).forEach(el => el.removeAttribute(INJECTED_ATTR));
   }
 
@@ -577,33 +567,12 @@
 
     const title      = titleEl.textContent.trim();
     const artistName = artistEl.textContent.trim();
-    const artistId   = (artistEl.getAttribute('href') || '').match(/\/artist\/(\d+)/)?.[1];
-    const albumEl    = row.querySelector('[data-testid="album"]');
-
-    // Check the in-memory queue cache first — populated after the first API search
-    // so recycled rows with the same content are resolved instantly.
     const rowKey = getRowKey(row);
+
     if (queueTrackCache.has(rowKey)) return queueTrackCache.get(rowKey);
 
-    // Try the currentTrackMap next (free, no network needed).
-    if (currentTrackMap && artistId) {
-      if (albumEl) {
-        const albumId = (albumEl.getAttribute('href') || '').match(/\/album\/(\d+)/)?.[1];
-        if (albumId) {
-          const id = currentTrackMap.byId.get(makeTrackKey(title, artistId, albumId));
-          if (id) { queueTrackCache.set(rowKey, id); return id; }
-        }
-        const albumTitle = albumEl.textContent?.trim();
-        if (albumTitle) {
-          const id = currentTrackMap.byTitle.get(makeTrackKey(title, artistId, albumTitle));
-          if (id) { queueTrackCache.set(rowKey, id); return id; }
-        }
-      }
-      const id = currentTrackMap.byArtistOnly.get(
-        `${normalizeTrackKeyPart(title)}\0${normalizeTrackKeyPart(artistId)}`
-      );
-      if (id) { queueTrackCache.set(rowKey, id); return id; }
-    }
+    const mapHit = lookupTrackInMap(row);
+    if (mapHit) { queueTrackCache.set(rowKey, mapHit); return mapHit; }
 
     // No map hit — search the Deezer API by title + artist name.
     const q = `track:"${title}" artist:"${artistName}"`;
@@ -676,12 +645,7 @@
       row.setAttribute(INJECTED_ATTR, 'pending');
 
       const trackId = await resolveQueueRowTrackId(row);
-      if (!trackId) {
-        row.removeAttribute(INJECTED_ATTR);
-        continue;
-      }
-
-      if (!row.isConnected) {
+      if (!trackId || !row.isConnected) {
         row.removeAttribute(INJECTED_ATTR);
         continue;
       }
@@ -782,9 +746,7 @@
   // Watch the <title> element only for URL/navigation changes (not for badge updates).
   const titleEl = document.querySelector('title');
   if (titleEl) {
-    new MutationObserver(() => {
-      scheduleUrlChange();
-    }).observe(titleEl, { childList: true });
+    new MutationObserver(scheduleUrlChange).observe(titleEl, { childList: true });
   }
 
   // Also handle browser back/forward navigation (popstate).
