@@ -41,6 +41,11 @@
   async function loadPersistedCache() {
     try {
       const result = await storageApi.local.get(CACHE_STORAGE_KEY);
+      if (localStorage.getItem('deezerBpmCacheClear') === '1') {
+        storageApi.local.remove(CACHE_STORAGE_KEY);
+        logDebugInfo('Cache cleared');
+        localStorage.removeItem('deezerBpmCacheClear');
+      }
       const saved  = result[CACHE_STORAGE_KEY];
       if (saved && typeof saved === 'object') {
         for (const [id, bpm] of Object.entries(saved)) bpmCache.set(id, bpm);
@@ -94,7 +99,6 @@
   // Fetch the BPM for a single track, using the in-memory cache and the queue.
   async function fetchBpmCached(trackId) {
     const id = String(trackId); // normalise to string so cache keys are consistent
-
     if (bpmCache.has(id)) return bpmCache.get(id); // already known — return immediately
     if (inFlight.has(id)) return inFlight.get(id); // request already in-flight — share it
 
@@ -104,7 +108,7 @@
         const resp = await fetch(`https://api.deezer.com/track/${id}`);
         if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
         const data = await resp.json();
-        logDebugInfo('track BPM:', data);
+        logDebugInfo('Fetched track from API:', data);
         // Deezer reports 0 for tracks with no BPM data; treat that as "unknown".
         const bpm  = (typeof data.bpm === 'number' && data.bpm > 0) ? Math.round(data.bpm) : null;
         bpmCache.set(id, bpm);
@@ -218,6 +222,7 @@
     setBadgeValue('…');
     try {
       const bpm = await fetchBpmCached(trackId);
+      logDebugInfo('Fetched track BPM:', bpm);
       setBadgeValue(bpm ?? 'N/A', bpm != null);
     } catch (err) {
       if (err.name !== 'AbortError') { console.warn('[Deezer BPM]', err); setBadgeValue('–'); }
@@ -454,7 +459,7 @@
       // Fetch BPM asynchronously and update the span when ready.
       fetchBpmCached(trackId).then(bpm => {
         if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
-        span.textContent = bpm != null ? String(bpm) : '?';
+        span.textContent = bpm != null ? String(bpm) : ' N/A ';
         if (bpm != null) span.classList.add(`${INLINE_CLASS}--loaded`); // triggers styling change
       }).catch(err => {
         console.warn('[Deezer BPM] fetch error for track', trackId, err);
