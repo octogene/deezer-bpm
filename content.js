@@ -1,5 +1,3 @@
-// The entire script is wrapped in an IIFE (Immediately Invoked Function Expression)
-// to avoid polluting the global scope with our variables.
 (function () {
   'use strict';
 
@@ -231,6 +229,7 @@
   let currentTrackMap     = null; // Map: "title\0artistId" → trackId (for sorted views)
   let currentPageUrl      = null; // pathname for which currentTrackIds was fetched
   let isLoadingTrackIds   = false; // prevents concurrent loads of the same page
+  const queueTrackCache   = new Map(); // "title\0artistName" → trackId, avoids re-searching queue rows
 
   // Enable or disable playlist mode, persisting the preference to localStorage.
   function setPlaylistMode(enabled) {
@@ -407,6 +406,9 @@
     if (!currentTrackIds || currentPageUrl !== location.pathname) return;
 
     for (const row of document.querySelectorAll('[role="row"][aria-rowindex]')) {
+      // Skip rows inside the play-queue modal — handled separately by injectQueueBpms().
+      if (row.closest('.player-queuelist')) continue;
+
       // aria-rowindex is 1-based; map it to our 0-based currentTrackIds array.
       const rowIndex = parseInt(row.getAttribute('aria-rowindex'), 10) - 1;
       const trackId  = resolveTrackId(row, rowIndex);
@@ -494,6 +496,129 @@
     document.querySelectorAll(`[${INJECTED_ATTR}]`).forEach(el => el.removeAttribute(INJECTED_ATTR));
   }
 
+  // Resolve a track ID for a queue row purely from its DOM content.
+  // Tries the currentTrackMap first (free, no network), then falls back to a
+  // Deezer API search using the title and artist name visible in the row.
+  async function resolveQueueRowTrackId(row) {
+    const titleEl  = row.querySelector('[data-testid="title"]');
+    const artistEl = row.querySelector('[data-testid="artist"]');
+    if (!titleEl || !artistEl) return null;
+
+    const title      = titleEl.textContent.trim();
+    const artistName = artistEl.textContent.trim();
+    const artistId   = (artistEl.getAttribute('href') || '').match(/\/artist\/(\d+)/)?.[1];
+    const albumEl    = row.querySelector('[data-testid="album"]');
+
+    // Check the in-memory queue cache first — populated after the first API search
+    // so recycled rows with the same content are resolved instantly.
+    const rowKey = `${normalizeTrackKeyPart(title)}\0${normalizeTrackKeyPart(artistName)}`;
+    if (queueTrackCache.has(rowKey)) return queueTrackCache.get(rowKey);
+
+    // Try the currentTrackMap next (free, no network needed).
+    if (currentTrackMap && artistId) {
+      if (albumEl) {
+        const albumId = (albumEl.getAttribute('href') || '').match(/\/album\/(\d+)/)?.[1];
+        if (albumId) {
+          const id = currentTrackMap.byId.get(makeTrackKey(title, artistId, albumId));
+          if (id) { queueTrackCache.set(rowKey, id); return id; }
+        }
+        const albumTitle = albumEl.textContent?.trim();
+        if (albumTitle) {
+          const id = currentTrackMap.byTitle.get(makeTrackKey(title, artistId, albumTitle));
+          if (id) { queueTrackCache.set(rowKey, id); return id; }
+        }
+      }
+      const id = currentTrackMap.byArtistOnly.get(
+        `${normalizeTrackKeyPart(title)}\0${normalizeTrackKeyPart(artistId)}`
+      );
+      if (id) { queueTrackCache.set(rowKey, id); return id; }
+    }
+
+    // No map hit — search the Deezer API by title + artist name.
+    const q = `track:"${title}" artist:"${artistName}"`;
+    try {
+      const resp = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=1`);
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      const id = data.data?.[0]?.id;
+      const resolved = id != null ? String(id) : null;
+      if (resolved) queueTrackCache.set(rowKey, resolved); // cache for future scroll recycling
+      return resolved;
+    } catch {
+      return null;
+    }
+  }
+
+  async function injectQueueBpms() {
+    const queueContainer = document.querySelector('.player-queuelist');
+    if (!queueContainer) return;
+
+    for (const row of queueContainer.querySelectorAll('[role="row"][aria-rowindex]')) {
+      const injectedAttr = row.getAttribute(INJECTED_ATTR);
+
+      if (injectedAttr === 'pending') continue;
+
+      if (injectedAttr === '1') {
+        const existing = row.querySelector(`.${INLINE_CLASS}`);
+        if (existing) {
+          // Check if the row was recycled in-place: compare the stored title+artist
+          // key on the span against what is currently in the DOM.
+          const titleEl  = row.querySelector('[data-testid="title"]');
+          const artistEl = row.querySelector('[data-testid="artist"]');
+          const currentKey = titleEl && artistEl
+            ? `${normalizeTrackKeyPart(titleEl.textContent.trim())}\0${normalizeTrackKeyPart(artistEl.textContent.trim())}`
+            : null;
+          if (existing.dataset.dbpmRowKey === currentKey) continue; // same content — nothing to do
+          // Content changed: row was recycled. Remove stale span and re-inject.
+          existing.remove();
+        }
+        row.removeAttribute(INJECTED_ATTR);
+      }
+
+      // Claim the row immediately before any await to prevent concurrent injection.
+      row.setAttribute(INJECTED_ATTR, 'pending');
+
+      const trackId = await resolveQueueRowTrackId(row);
+      if (!trackId) {
+        row.removeAttribute(INJECTED_ATTR);
+        continue;
+      }
+
+      if (!row.isConnected) {
+        row.removeAttribute(INJECTED_ATTR);
+        continue;
+      }
+
+      // Compute the row key again (post-await) to store on the span for staleness checks.
+      const titleEl  = row.querySelector('[data-testid="title"]');
+      const artistEl = row.querySelector('[data-testid="artist"]');
+      const rowKey = titleEl && artistEl
+        ? `${normalizeTrackKeyPart(titleEl.textContent.trim())}\0${normalizeTrackKeyPart(artistEl.textContent.trim())}`
+        : trackId;
+
+      row.setAttribute(INJECTED_ATTR, '1');
+
+      const span = document.createElement('span');
+      span.className = INLINE_CLASS;
+      span.dataset.dbpmTrack  = trackId;
+      span.dataset.dbpmRowKey = rowKey; // used to detect in-place row recycling on scroll
+      span.textContent = '…';
+
+      const durationCell = findDurationCell(row);
+      if (durationCell) durationCell.before(span);
+      else row.appendChild(span);
+
+      fetchBpmCached(trackId).then(bpm => {
+        if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
+        span.textContent = bpm != null ? String(bpm) : '?';
+        if (bpm != null) span.classList.add(`${INLINE_CLASS}--loaded`);
+      }).catch(err => {
+        console.warn('[Deezer BPM] fetch error for queue track', trackId, err);
+        if (span.isConnected) span.textContent = '?';
+      });
+    }
+  }
+
   // Watch the entire document for newly added rows.
   // Deezer's virtualised list only keeps visible rows in the DOM; as the user
   // scrolls, old rows are removed and new ones are added. We use this observer
@@ -507,12 +632,13 @@
         [...m.addedNodes].some(n =>
           n.nodeType === 1 &&
           !n.classList?.contains(INLINE_CLASS) &&
-          // Either the node itself is a row, or it contains rows (e.g. a container
-          // that holds many rows was added at once).
           (n.getAttribute?.('role') === 'row' || n.querySelector?.('[role="row"][aria-rowindex]'))
         )
       );
       if (!hasNewRows) return;
+
+      // Inject into the queue list if it's open, independently of the page state.
+      injectQueueBpms();
 
       // Self-healing: if the page changed (e.g. the user navigated to a different
       // album), trigger a full reload of track IDs before injecting.
