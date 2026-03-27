@@ -457,13 +457,9 @@
       else row.appendChild(span);                   // fallback: append at the end of the row
 
       // Fetch BPM asynchronously and update the span when ready.
-      fetchBpmCached(trackId).then(bpm => {
-        if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
-        span.textContent = bpm != null ? String(bpm) : ' N/A ';
-        if (bpm != null) span.classList.add(`${INLINE_CLASS}--loaded`); // triggers styling change
-      }).catch(err => {
+      fetchBpmCached(trackId).then(renderBpmValue(span, trackId)).catch(err => {
         console.warn('[Deezer BPM] fetch error for track', trackId, err);
-        if (span.isConnected) span.textContent = '?';
+        if (span.isConnected) span.textContent = 'N/A';
       });
     }
   }
@@ -566,6 +562,15 @@
     }
   }
 
+  function renderBpmValue(span, trackId) {
+    return bpm => {
+      if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
+      span.textContent = bpm != null ? String(bpm) : 'N/A';
+      if (bpm != null) span.classList.add(`${INLINE_CLASS}--loaded`)
+      else span.classList.add(`${INLINE_CLASS}--unknown`);
+    };
+  }
+
   async function injectQueueBpms() {
     const queueContainer = document.querySelector('.player-queuelist');
     if (!queueContainer) return;
@@ -625,11 +630,7 @@
       if (durationCell) durationCell.before(span);
       else row.appendChild(span);
 
-      fetchBpmCached(trackId).then(bpm => {
-        if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
-        span.textContent = bpm != null ? String(bpm) : '?';
-        if (bpm != null) span.classList.add(`${INLINE_CLASS}--loaded`);
-      }).catch(err => {
+      fetchBpmCached(trackId).then(renderBpmValue(span, trackId)).catch(err => {
         console.warn('[Deezer BPM] fetch error for queue track', trackId, err);
         if (span.isConnected) span.textContent = '?';
       });

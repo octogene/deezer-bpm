@@ -115,3 +115,9 @@
   color: color-mix(in srgb, var(--tempo-colors-background-accent-primary-default, #a238ff) 50%, white);
   border-color: color-mix(in srgb, var(--tempo-colors-background-accent-primary-default, #a238ff) 55%, transparent);
 }
+
+.dbpm-inline--unknown {
+  color: var(--tempo-colors-text-neutral-tertiary-default, #555);
+  border-color: var(--tempo-colors-border-neutral-primary-default, #333);
+  background: transparent;
+}
