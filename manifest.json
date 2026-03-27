@@ -1,11 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Deezer BPM",
+  "name": "__MSG_extensionName__",
   "version": "1.0",
-  "description": "Shows the BPM of the currently playing song on Deezer",
+  "default_locale": "en",
+  "description": "__MSG_extensionDescription__",
   "icons": {
-    "48": "icons/icon48.svg"
+    "48": "icons/icon48.png",
+    "64": "icons/icon64.png",
+    "128": "icons/icon128.png"
   },
+  "homepage_url": "https://octogene.github.io/deezer-bpm/",
   "permissions": ["storage"],
   "host_permissions": [
     "https://www.deezer.com/*",

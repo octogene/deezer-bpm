@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "Deezer BPM"
+  },
+  "extensionDescription": {
+    "message": "Shows the BPM of the currently playing song on Deezer"
+  }
+}
