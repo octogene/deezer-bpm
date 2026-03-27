@@ -456,17 +456,7 @@
             if (!resolvedId || !row.isConnected) { row.removeAttribute(INJECTED_ATTR); return; }
             if (row.getAttribute(INJECTED_ATTR) !== 'pending') return; // already handled
             row.setAttribute(INJECTED_ATTR, '1');
-            const span = document.createElement('span');
-            span.className = INLINE_CLASS;
-            span.dataset.dbpmTrack = resolvedId;
-            span.textContent = '…';
-            const durationCell = findDurationCell(row);
-            if (durationCell) durationCell.before(span);
-            else row.appendChild(span);
-            fetchBpmCached(resolvedId).then(renderBpmValue(span, resolvedId)).catch(err => {
-              console.warn('[Deezer BPM] fetch error for track', resolvedId, err);
-              if (span.isConnected) span.textContent = 'N/A';
-            });
+            injectBpmSpanIntoRow(row, resolvedId);
           });
         }
         continue;
@@ -488,20 +478,7 @@
       // Mark the row so we don't process it again when the observer fires.
       row.setAttribute(INJECTED_ATTR, '1');
 
-      const span = document.createElement('span');
-      span.className = INLINE_CLASS;
-      span.dataset.dbpmTrack = trackId; // stored for stale-detection on re-renders
-      span.textContent = '…'; // placeholder shown while the BPM is being fetched
-
-      const durationCell = findDurationCell(row);
-      if (durationCell) durationCell.before(span); // insert as a new column before duration
-      else row.appendChild(span);                   // fallback: append at the end of the row
-
-      // Fetch BPM asynchronously and update the span when ready.
-      fetchBpmCached(trackId).then(renderBpmValue(span, trackId)).catch(err => {
-        console.warn('[Deezer BPM] fetch error for track', trackId, err);
-        if (span.isConnected) span.textContent = 'N/A';
-      });
+      injectBpmSpanIntoRow(row, trackId);
     }
   }
 
@@ -658,6 +635,27 @@
     };
   }
 
+  // Create and insert a BPM span into `row` for the given `trackId`.
+  // `rowKey` is an optional title+artist key stored on the span for
+  // staleness detection when rows are recycled during virtual scrolling.
+  // `errorText` is the text shown in the span if the BPM fetch fails.
+  function injectBpmSpanIntoRow(row, trackId, { rowKey = null, errorText = 'N/A' } = {}) {
+    const span = document.createElement('span');
+    span.className = INLINE_CLASS;
+    span.dataset.dbpmTrack = trackId;
+    if (rowKey != null) span.dataset.dbpmRowKey = rowKey;
+    span.textContent = '…';
+
+    const durationCell = findDurationCell(row);
+    if (durationCell) durationCell.before(span);
+    else row.appendChild(span);
+
+    fetchBpmCached(trackId).then(renderBpmValue(span, trackId)).catch(err => {
+      console.warn('[Deezer BPM] fetch error for track', trackId, err);
+      if (span.isConnected) span.textContent = errorText;
+    });
+  }
+
   async function injectQueueBpms() {
     const queueContainer = document.querySelector('.player-queuelist');
     if (!queueContainer) return;
@@ -698,6 +696,8 @@
         continue;
       }
 
+      row.setAttribute(INJECTED_ATTR, '1');
+
       // Compute the row key again (post-await) to store on the span for staleness checks.
       const titleEl  = row.querySelector('[data-testid="title"]');
       const artistEl = row.querySelector('[data-testid="artist"]');
@@ -705,22 +705,7 @@
         ? `${normalizeTrackKeyPart(titleEl.textContent.trim())}\0${normalizeTrackKeyPart(artistEl.textContent.trim())}`
         : trackId;
 
-      row.setAttribute(INJECTED_ATTR, '1');
-
-      const span = document.createElement('span');
-      span.className = INLINE_CLASS;
-      span.dataset.dbpmTrack  = trackId;
-      span.dataset.dbpmRowKey = rowKey; // used to detect in-place row recycling on scroll
-      span.textContent = '…';
-
-      const durationCell = findDurationCell(row);
-      if (durationCell) durationCell.before(span);
-      else row.appendChild(span);
-
-      fetchBpmCached(trackId).then(renderBpmValue(span, trackId)).catch(err => {
-        console.warn('[Deezer BPM] fetch error for queue track', trackId, err);
-        if (span.isConnected) span.textContent = '?';
-      });
+      injectBpmSpanIntoRow(row, trackId);
     }
   }
 
