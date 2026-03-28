@@ -185,6 +185,37 @@
 
     const trackTitle = normalizeTrackKeyPart(anchor.textContent.trim());
     logDebugInfo('player track title:', trackTitle);
+
+    // First, try to resolve via currentTrackMap (the same lookup used by the
+    // playlist injection). This guarantees the badge uses the exact same ID as
+    // the inline BPM tags, avoiding any discrepancy caused by album vs playlist
+    // track IDs.
+    if (currentTrackMap) {
+      const artistEl = container.querySelector('[data-testid="artist"] a[href*="/artist/"]');
+      logDebugInfo('player artist:', artistEl?.getAttribute('href'));
+      if (artistEl) {
+        const artistId = artistEl.getAttribute('href').match(/\/artist\/(\d+)/)?.[1];
+        if (artistId) {
+          const albumMatch = anchor.getAttribute('href').match(/\/album\/(\d+)/);
+          const albumId = albumMatch?.[1];
+          // Try all map levels, from most to least specific.
+          let mapId = null;
+          if (albumId) {
+            mapId = currentTrackMap.byId.get(makeTrackKey(anchor.textContent.trim(), artistId, albumId));
+          }
+          if (!mapId) {
+            mapId = currentTrackMap.byArtistOnly.get(
+                `${trackTitle}\0${normalizeTrackKeyPart(artistId)}`
+            );
+          }
+          if (mapId) {
+            logDebugInfo('player track resolved via currentTrackMap:', mapId);
+            return mapId;
+          }
+        }
+      }
+    }
+
     const albumMatch = anchor.getAttribute('href').match(/\/album\/(\d+)/);
     if (!albumMatch) return null;
     const albumId = albumMatch[1];
