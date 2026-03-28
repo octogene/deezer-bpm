@@ -209,7 +209,86 @@
       margin-bottom: 24px;
     }
 
-    /* ── Footer ── */
+    /* ── FAQ ── */
+    .faq {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    .faq h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 24px;
+      text-align: center;
+    }
+
+    .faq-item {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      margin-bottom: 12px;
+      overflow: hidden;
+    }
+
+    .faq-question {
+      width: 100%;
+      background: none;
+      border: none;
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 600;
+      text-align: left;
+      padding: 20px 24px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      transition: color .2s;
+    }
+    .faq-question:hover { color: var(--purple-lt); }
+
+    .faq-chevron {
+      flex-shrink: 0;
+      font-size: .8rem;
+      transition: transform .25s;
+      color: var(--muted);
+    }
+    .faq-item.open .faq-chevron { transform: rotate(180deg); }
+
+    .faq-answer {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height .3s ease, padding .3s ease;
+      padding: 0 24px;
+    }
+    .faq-item.open .faq-answer {
+      max-height: 400px;
+      padding: 0 24px 20px;
+    }
+
+    .faq-answer p {
+      font-size: .92rem;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .faq-answer p + p {
+      margin-top: 12px;
+    }
+
+    .faq-answer .faq-label {
+      display: inline-block;
+      font-size: .75rem;
+      font-weight: 700;
+      letter-spacing: .07em;
+      text-transform: uppercase;
+      color: var(--purple-lt);
+      margin-bottom: 4px;
+    }
+
+      /* ── Footer ── */
     footer {
       text-align: center;
       padding: 32px 24px;
@@ -219,6 +298,56 @@
     }
     footer a { color: var(--muted); }
     footer a:hover { color: var(--text); }
+
+    /* ── Screenshot ── */
+    .screenshot-wrap {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 0 24px 64px;
+    }
+    .screenshot-wrap img {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 8px 48px rgba(0,0,0,.6);
+      cursor: zoom-in;
+    }
+
+    /* ── Lightbox ── */
+    .lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0, 0, 0, .88);
+      align-items: center;
+      justify-content: center;
+      cursor: zoom-out;
+    }
+    .lightbox.open {
+      display: flex;
+    }
+    .lightbox img {
+      max-width: 92vw;
+      max-height: 92vh;
+      border-radius: 10px;
+      box-shadow: 0 16px 80px rgba(0,0,0,.8);
+      user-select: none;
+    }
+    .lightbox-close {
+      position: fixed;
+      top: 20px;
+      right: 24px;
+      background: none;
+      border: none;
+      color: #fff;
+      font-size: 2rem;
+      line-height: 1;
+      cursor: pointer;
+      opacity: .7;
+      transition: opacity .2s;
+    }
+    .lightbox-close:hover { opacity: 1; }
   </style>
 </head>
 <body>
@@ -244,7 +373,7 @@
   </section>
 
   <div class="screenshot-wrap">
-    <img src="playlist.png" alt="Deezer BPM showing BPM values in a playlist" />
+    <img src="playlist_en.jpg" alt="Deezer BPM showing BPM values in a playlist" id="screenshot" />
   </div>
 
   <section class="features">
@@ -303,6 +432,39 @@
 <!--    </div>-->
 <!--  </section>-->
 
+  <section class="faq">
+    <h2>FAQ</h2>
+
+    <div class="faq-item">
+      <button class="faq-question" aria-expanded="false">
+        Why can't we sort the playlist by BPM?
+        <span class="faq-chevron">▼</span>
+      </button>
+      <div class="faq-answer" role="region">
+        <span class="faq-label">In short</span>
+        <p>
+          BPM values are fetched one by one as you scroll through a playlist — so until you've
+          scrolled through every track, the extension simply doesn't have all the numbers it
+          would need to sort the full list. Deezer also doesn't offer a built-in way for
+          extensions to reorder tracks, so sorting would have to happen on top of the existing
+          interface, which isn't currently supported.
+        </p>
+        <span class="faq-label" style="margin-top: 16px; display: inline-block;">For the curious</span>
+        <p>
+          Deezer uses a virtualised list to render playlists: only the rows currently visible
+          on screen exist in the DOM, and they are recycled as you scroll. This means the
+          extension can only fetch and display BPM values for tracks that have been rendered at
+          least once. Without a complete dataset for every track, a meaningful sort isn't
+          possible. On top of that, reordering the rows would require taking over Deezer's own
+          DOM management, which is fragile and likely to break with any Deezer update. A future
+          version may offer an export of BPM data or a sorted overlay view, but true in-place
+          sorting is not planned for now.
+        </p>
+      </div>
+    </div>
+
+  </section>
+
   <section class="contact">
     <h2>Contact</h2>
     <p>Have a suggestion or found a bug? Feel free to reach out!</p>
@@ -318,6 +480,46 @@
       BPM data from the <a href="https://developers.deezer.com/api">Deezer API</a>
     </p>
   </footer>
+
+  <!-- Lightbox -->
+  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot fullscreen">
+    <button class="lightbox-close" id="lightbox-close" aria-label="Close">✕</button>
+    <img src="playlist_en.jpg" alt="Deezer BPM showing BPM values in a playlist — fullscreen" />
+  </div>
+
+  <script>
+    document.querySelectorAll('.faq-question').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const item = btn.closest('.faq-item');
+        const isOpen = item.classList.contains('open');
+        // Close all open items
+        document.querySelectorAll('.faq-item.open').forEach(el => {
+          el.classList.remove('open');
+          el.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
+        });
+        // Toggle the clicked one
+        if (!isOpen) {
+          item.classList.add('open');
+          btn.setAttribute('aria-expanded', 'true');
+        }
+      });
+    });
+
+    // ── Lightbox ──
+    const lightbox      = document.getElementById('lightbox');
+    const lightboxClose = document.getElementById('lightbox-close');
+    const screenshot    = document.getElementById('screenshot');
+
+    function openLightbox()  { lightbox.classList.add('open');    document.body.style.overflow = 'hidden'; }
+    function closeLightbox() { lightbox.classList.remove('open'); document.body.style.overflow = ''; }
+
+    screenshot.addEventListener('click', openLightbox);
+    lightboxClose.addEventListener('click', (e) => { e.stopPropagation(); closeLightbox(); });
+    lightbox.addEventListener('click', closeLightbox);   // click on backdrop closes it
+
+    // Close with Escape key
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+  </script>
 
 </body>
 </html>
