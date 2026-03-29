@@ -40,9 +40,13 @@
     //   enable:  localStorage.setItem('deezerBpmDebug', '1')
     //   disable: localStorage.removeItem('deezerBpmDebug')
     const logDebugInfo = localStorage.getItem('deezerBpmDebug') === '1'
-        ? console.log.bind(console, '[Deezer BPM]')
+        ? (msg, ...args) => console.log('%c[Deezer BPM]', 'color: white; background: #7B2FBE; border-radius: 3px; font-weight: bold', msg, ...args)
         : () => {
         };
+
+    const logDebugError = localStorage.getItem('deezerBpmDebug') === '1'
+        ? (msg, ...args) => console.log('%c[Deezer BPM]', 'color: white; background: red; border-radius: 3px; font-weight: bold', msg, ...args)
+        : () => {};
 
     async function checkCacheClear() {
         try {
@@ -612,9 +616,14 @@
             const span = eagerSpan ? createBpmSpan(row) : null;
 
             resolveTrackId(row).then(trackId => {
-                if (!trackId || !row.isConnected) {
+                if (!row.isConnected) {
                     row.removeAttribute(INJECTED_ATTR);
                     span?.remove();
+                    return;
+                }
+                if (!trackId) {
+                    row.removeAttribute(INJECTED_ATTR);
+                    if (span) span.textContent = '–';
                     return;
                 }
                 if (row.getAttribute(INJECTED_ATTR) !== 'pending') {
@@ -658,40 +667,6 @@
                 !!row.querySelector('[data-testid="title"]') &&
                 !row.querySelector('button[aria-label="Add track"]'),
         });
-
-        // for (const row of document.querySelectorAll('[role="row"][aria-rowindex]')) {
-        //     // Skip rows inside the play-queue modal — handled separately by injectQueueBpms().
-        //     if (row.closest('.player-queuelist')) continue;
-        //
-        //     // Skip rows that don't have a title (e.g. "Add to queue").'
-        //     if (!row.querySelector('[data-testid="title"]')) continue;
-        //
-        //     // Skip "Add track" placeholder rows (they have no real track data).
-        //     if (row.querySelector('button[aria-label="Add track"]')) continue;
-        //
-        //     if (row.getAttribute(INJECTED_ATTR)) continue;
-        //
-        //     row.setAttribute(INJECTED_ATTR, 'pending');
-        //     // Insert the placeholder span immediately so '…' appears while we resolve.
-        //     const span = createBpmSpan(row)
-        //
-        //
-        //     resolveTrackIdViaAlbum(row).then(resolvedId => {
-        //         if (!resolvedId || !row.isConnected) {
-        //             row.removeAttribute(INJECTED_ATTR);
-        //             span.remove();
-        //             return;
-        //         }
-        //         if (row.getAttribute(INJECTED_ATTR) !== 'pending') return; // already handled
-        //         row.setAttribute(INJECTED_ATTR, '1');
-        //         span.dataset.dbpmTrack = resolvedId;
-        //         fetchBpmCached(resolvedId).then(renderBpmValue(span, resolvedId)).catch(err => {
-        //             console.warn('[Deezer BPM] fetch error for track', resolvedId, err);
-        //             if (span.isConnected) span.textContent = 'N/A';
-        //         });
-        //         // injectBpmSpanIntoRow(row, resolvedId);
-        //     });
-        // }
     }
 
     // Remove all BPM tags we injected and clear the "already processed" markers
@@ -782,22 +757,28 @@
         let trackId = getTrackIdFromCoverIdAndTitle(coverId, title);
         if (trackId) return trackId;
 
-        if (queueTrackCache.has(rowKey)) return queueTrackCache.get(rowKey);
-        logDebugInfo('[QUEUE ROW RES]', 'Queue row resolving mechanism cache miss');
+        // if (queueTrackCache.has(rowKey)) return queueTrackCache.get(rowKey);
+        // logDebugInfo('[QUEUE ROW RES]', 'Queue row resolving mechanism cache miss');
 
         // No map hit — search the Deezer API by title + artist name.
         const q = `track:"${title}" artist:"${artistName}"`;
         try {
+            // TODO: Notify that id is not precise
+            //  Should be colored in a specific color
+            //  Should be retried at some point
+            //  Could be shown as a clickable button that can be retried
             logDebugInfo('[QUEUE ROW RES]', 'Searching for track', q);
             const resp = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=1`);
             if (!resp.ok) return null;
             const data = await resp.json();
-            logDebugInfo('Deezer API search result:', data);
             const id = data.data?.[0]?.id;
             const resolved = id != null ? String(id) : null;
             if (resolved) queueTrackCache.set(rowKey, resolved); // cache for future scroll recycling
+            else logDebugError('Deezer API search not found for ', q, data);
             return resolved;
         } catch {
+            logDebugError('Deezer API search failed for', q);
+            return null;
             return null;
         }
     }
@@ -858,40 +839,9 @@
         const queueContainer = document.querySelector('.player-queuelist');
         if (!queueContainer) return;
 
-        for (const row of queueContainer.querySelectorAll('[role="row"][aria-rowindex]')) {
-            const injectedAttr = row.getAttribute(INJECTED_ATTR);
-
-            if (injectedAttr === 'pending') continue;
-
-            if (injectedAttr === '1') {
-                const existing = row.querySelector(`.${INLINE_CLASS}`);
-                if (existing) {
-                    // Check if the row was recycled in-place: compare the stored title+artist
-                    // key on the span against what is currently in the DOM.
-                    const currentKey = getRowKey(row);
-                    if (existing.dataset.dbpmRowKey === currentKey) continue; // same content — nothing to do
-                    // Content changed: row was recycled. Remove stale span and re-inject.
-                    existing.remove();
-                }
-                row.removeAttribute(INJECTED_ATTR);
-            }
-
-            // Claim the row immediately before any await to prevent concurrent injection.
-            row.setAttribute(INJECTED_ATTR, 'pending');
-
-            const trackId = await resolveQueueRowTrackId(row);
-            if (!trackId || !row.isConnected) {
-                row.removeAttribute(INJECTED_ATTR);
-                continue;
-            }
-
-            row.setAttribute(INJECTED_ATTR, '1');
-
-            // Compute the row key again (post-await) to store on the span for staleness checks.
-            const rowKey = getRowKey(row) ?? trackId;
-
-            injectBpmSpanIntoRow(row, trackId, {rowKey, errorText: 'N/A'});
-        }
+        injectBpmsIntoRows(queueContainer, resolveQueueRowTrackId, {
+            eagerSpan: true,
+        })
     }
 
     // Watch the entire document for newly added rows.
