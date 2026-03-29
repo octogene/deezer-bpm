@@ -33,6 +33,7 @@
     const CACHE_STORAGE_KEY = 'deezerBpmCache';
     const COVER_CACHE_STORAGE_KEY = 'deezerCoverIdCache';
     const CLEAR_CACHE_STORAGE_KEY = 'deezerBpmCacheClear';
+    const ALBUM_TRACK_CACHE_STORAGE_KEY = 'deezerAlbumTrackCache';
     const MAX_CACHE_SIZE = 5000; // cap to avoid filling up extension storage
     const DEBUG = localStorage.getItem('deezerBpmDebug') === '1';
 
@@ -53,7 +54,7 @@
     async function checkCacheClear() {
         try {
             if (localStorage.getItem(CLEAR_CACHE_STORAGE_KEY) === '1') {
-                storageApi.local.remove(CACHE_STORAGE_KEY);
+                storageApi.local.remove([CACHE_STORAGE_KEY, COVER_CACHE_STORAGE_KEY, ALBUM_TRACK_CACHE_STORAGE_KEY]);
                 logDebugInfo('Cache cleared');
                 localStorage.removeItem(CLEAR_CACHE_STORAGE_KEY);
             }
@@ -80,13 +81,17 @@
     // Called once at startup, before any fetches happen.
     async function loadPersistedCoverCache() {
         try {
-            const cache = await storageApi.local.get(COVER_CACHE_STORAGE_KEY);
+            const cache = await storageApi.local.get([COVER_CACHE_STORAGE_KEY, ALBUM_TRACK_CACHE_STORAGE_KEY]);
             const savedCover = cache[COVER_CACHE_STORAGE_KEY];
             if (savedCover && typeof savedCover === 'object') {
-                for (const [id, coverId] of Object.entries(savedCover)) coverCache.set(id, coverId);
+                for (const [id, albumId] of Object.entries(savedCover)) coverCache.set(id, albumId);
+            }
+            const savedAlbumTrack = cache[ALBUM_TRACK_CACHE_STORAGE_KEY];
+            if (savedAlbumTrack && typeof savedAlbumTrack === 'object') {
+                for (const [key, trackId] of Object.entries(savedAlbumTrack)) albumIdTrackIdMap.set(key, trackId);
             }
         } catch (e) {
-            console.warn('[Deezer BPM] Could not load cover cache:', e);
+            console.warn('[Deezer BPM] Could not load cover/album-track cache:', e);
         }
     }
 
@@ -94,17 +99,18 @@
     // We debounce by 2 s so that a burst of fetches (e.g. loading a full playlist)
     // only triggers one write instead of hundreds.
     let saveDebounce = null;
-
     function scheduleSaveCache() {
         clearTimeout(saveDebounce);
         saveDebounce = setTimeout(() => {
-            // Keep only the most recent MAX_CACHE_SIZE entries to stay within storage limits.
             const bpmEntries = [...bpmCache.entries()].slice(-MAX_CACHE_SIZE);
             const coverEntries = [...coverCache.entries()].slice(-MAX_CACHE_SIZE);
+            const albumTrackEntries = [...albumIdTrackIdMap.entries()].slice(-MAX_CACHE_SIZE);
             storageApi.local.set({[CACHE_STORAGE_KEY]: Object.fromEntries(bpmEntries)})
                 .catch(e => console.warn('[Deezer BPM] Could not persist bpm cache:', e));
             storageApi.local.set({[COVER_CACHE_STORAGE_KEY]: Object.fromEntries(coverEntries)})
                 .catch(e => console.warn('[Deezer BPM] Could not persist cover cache:', e));
+            storageApi.local.set({[ALBUM_TRACK_CACHE_STORAGE_KEY]: Object.fromEntries(albumTrackEntries)})
+                .catch(e => console.warn('[Deezer BPM] Could not persist album-track cache:', e));
         }, 2000);
     }
 
