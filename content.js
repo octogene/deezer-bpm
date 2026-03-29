@@ -9,6 +9,7 @@
     const INJECTED_ATTR = 'data-dbpm-injected';  // attribute we set on rows we already processed
     const STORAGE_KEY = 'deezerBpmPlaylistMode'; // localStorage key for playlist mode preference
     const COVER_PLACEHOLDER_ID = 'd41d8cd98f00b204e9800998ecf8427e' // hash of the cover image placeholder
+    const UNRESOLVABLE = Symbol('unresolvable'); // returned by resolvers to permanently skip a row
 
     // ── Persistent BPM cache ─────────────────────────────────────────────────
     // We cache BPM values so we never fetch the same track twice, even across
@@ -16,8 +17,8 @@
     // startup and written back after every new fetch.
 
     const bpmCache = new Map(); // trackId (string) → number|null
-    const inFlight = new Map(); // trackId (string) → Promise<number|null>
     const coverCache = new Map(); // coverId (string) → albumId (string|null)
+    const inFlight = new Map(); // trackId (string) → Promise<number|null>
     const albumCache = new Map(); // coverId (string) → albumData
     const inFlightAlbum = new Map(); // coverId (string) -> Promise<albumId (string|null)>
     // Tracks requests that are currently in-flight so
@@ -33,18 +34,19 @@
     const COVER_CACHE_STORAGE_KEY = 'deezerCoverIdCache';
     const CLEAR_CACHE_STORAGE_KEY = 'deezerBpmCacheClear';
     const MAX_CACHE_SIZE = 5000; // cap to avoid filling up extension storage
+    const DEBUG = localStorage.getItem('deezerBpmDebug') === '1';
 
     // ── Debug logging ─────────────────────────────────────────────────────────
     // Set localStorage key 'deezerBpmDebug' to '1' in the browser console to
     // enable verbose logging. Persists across reloads until manually removed.
     //   enable:  localStorage.setItem('deezerBpmDebug', '1')
     //   disable: localStorage.removeItem('deezerBpmDebug')
-    const logDebugInfo = localStorage.getItem('deezerBpmDebug') === '1'
+    const logDebugInfo = DEBUG
         ? (msg, ...args) => console.log('%c[Deezer BPM]', 'color: white; background: #7B2FBE; border-radius: 3px; font-weight: bold', msg, ...args)
         : () => {
         };
 
-    const logDebugError = localStorage.getItem('deezerBpmDebug') === '1'
+    const logDebugError = DEBUG
         ? (msg, ...args) => console.log('%c[Deezer BPM]', 'color: white; background: red; border-radius: 3px; font-weight: bold', msg, ...args)
         : () => {};
 
@@ -77,11 +79,6 @@
     // Read the persisted cache from extension storage into the in-memory Map.
     // Called once at startup, before any fetches happen.
     async function loadPersistedCoverCache() {
-        if (localStorage.getItem(CLEAR_CACHE_STORAGE_KEY) === '1') {
-            storageApi.local.remove(COVER_CACHE_STORAGE_KEY);
-            logDebugInfo('Cache cleared');
-            localStorage.removeItem(CLEAR_CACHE_STORAGE_KEY);
-        }
         try {
             const cache = await storageApi.local.get(COVER_CACHE_STORAGE_KEY);
             const savedCover = cache[COVER_CACHE_STORAGE_KEY];
@@ -210,7 +207,6 @@
                 const albumData = {
                     id: data.id,
                     title: data.title,
-                    cover: data.cover,
                     coverId: coverId,
                     tracks: allTracks.map(track => ({
                         id: track.id,
@@ -354,21 +350,15 @@
 
     let playlistModeEnabled = true;
     let playlistObserver = null;
-    let currentTrackIds = null; // ordered array of track IDs for the current page
-    let currentTrackMap = null; // Map: "title\0artistId" → trackId (for sorted views)
     let currentPageUrl = null; // pathname for which currentTrackIds was fetched
     let isLoadingTrackIds = false; // prevents concurrent loads of the same page
-    let isPrivatePlaylist = false; // true when the API returned OAuthException (private playlist)
-    let useAlbumRowResolver = false; // true when on a playlist page using row-based album resolution
     let albumIdTrackIdMap = new Map();
-    const queueTrackCache = new Map(); // "title\0artistName" → trackId, avoids re-searching queue rows
+    let isTrackPage = false; // true when on a playlist or album page
 
     // Entry point for injecting BPMs into the current page.
     // Handles the case where the page URL changed since the last call (navigated
     // to a different playlist/album) by fetching a fresh track list first.
     async function injectPlaylistBpms() {
-        if (isLoadingTrackIds) return; // a load is already in progress — don't start another
-
         if (currentPageUrl !== location.pathname) {
             // The user navigated to a new page. Clean up any tags from the previous page
             // before loading the new track list.
@@ -377,11 +367,10 @@
             const targetUrl = location.pathname;
             isLoadingTrackIds = true;
             currentPageUrl = targetUrl; // set early so other callers see the new URL
-            currentTrackIds = null;
-            currentTrackMap = null;
-            isPrivatePlaylist = false;
+            isTrackPage = false;
+
             try {
-                currentTrackIds = await loadTrackIdsForCurrentPage();
+                isTrackPage = detectPageType();
             } finally {
                 isLoadingTrackIds = false;
             }
@@ -390,14 +379,12 @@
             // our data is already stale. Reset and schedule a fresh attempt.
             if (location.pathname !== targetUrl) {
                 currentPageUrl = null;
-                currentTrackIds = null;
-                currentTrackMap = null;
                 setTimeout(injectPlaylistBpms, 100);
                 return;
             }
         }
 
-        if (!currentTrackIds || (currentTrackIds.length === 0 && isPrivatePlaylist)) return; // not a playlist/album page
+        if (!isTrackPage) return; // not a playlist/album page
 
         injectPlaceholders();
     }
@@ -414,6 +401,12 @@
             removePlaylistBpms();
             stopPlaylistObserver();
         }
+    }
+
+    // Inspect the current URL and determine if this is a playlist or album page.
+    // Returns true if BPM injection should proceed, false otherwise.
+    function detectPageType() {
+        return /\/(playlist|album)\/\d+/.test(location.pathname);
     }
 
     // ── Deezer API – fetch ordered track IDs for current playlist/album ───────
@@ -433,9 +426,8 @@
             .replace(/[\u0300-\u036f]/g, '');
     }
 
-    function makeTrackKey(title, artistId, albumValue) {
+    function makeTrackKey(title, artistId) {
         const parts = [normalizeTrackKeyPart(title), normalizeTrackKeyPart(artistId)];
-        if (albumValue != null) parts.push(normalizeTrackKeyPart(albumValue));
         return parts.join('\0');
     }
 
@@ -471,95 +463,68 @@
         return result; // return whatever we have, coverId may still be null
     }
 
-    // Inspect the current URL and fetch the track list for the playlist or album.
-    // Returns null if the current page is neither a playlist nor an album.
-    async function loadTrackIdsForCurrentPage() {
-        const path = location.pathname;
-        const playlistMatch = path.match(/\/playlist\/(\d+)/);
-        const albumMatch = path.match(/\/album\/(\d+)/);
-
-        if (playlistMatch) {
-            // For playlist pages, skip the playlist API and rely on per-row DOM resolution
-            // (resolveQueueRowTrackId), which uses the search API per row instead.
-            logDebugInfo('Playlist page detected, using row-based search');
-            isPrivatePlaylist = true;
-            useAlbumRowResolver = true;
-            return [];
-        }
-
-        if (!albumMatch) return null;
-
-        try {
-            const data = await fetchAlbumCached(albumMatch[1]);
-            const ids = (data.tracks || []).map(t => String(t.id));
-            logDebugInfo(`Album track IDs loaded:`, ids.length, 'for album ID', albumMatch[1]);
-            return ids;
-        } catch (e) {
-            if (e.type === 'OAuthException') {
-                logDebugInfo('Private playlist detected, falling back to DOM search');
-                isPrivatePlaylist = true;
-                return [];
-            }
-            throw e;
-        }
-    }
-
-    // Resolve a track ID for any row that has an album link, by fetching the
-    // album's track list and matching by title. This is more reliable than
-    // trusting the playlist API track IDs, which can be stale or wrong.
-    // Returns null if no album link is found or the fetch fails.
-    async function resolveTrackIdViaAlbum(row) {
-        logDebugInfo('[ALBUM RES]', 'Using album link to resolve track ID', row)
-        const {titleEl, artistEl, albumEl, coverId} = await extractRowElementAsync(row)
-        logDebugInfo('[ALBUM RES]', 'Extracted row info:', {titleEl, artistEl, albumEl, coverId})
+    // Resolve a track ID for a row. Strategy:
+    // 1. Fast path: check albumIdTrackIdMap via coverId (free, no network)
+    // 2. Album path: fetch the album tracklist and match by title
+    // 3. Search fallback: use the Deezer search API by title + artist (queue rows only,
+    //    when no album link is available)
+    async function resolveRowTrackId(row, {allowSearchFallback = false} = {}) {
+        const {titleEl, artistEl, albumEl, coverId} = await extractRowElementAsync(row);
         if (!titleEl) return null;
 
         const rawTitle = titleEl.textContent.trim();
 
+        // ── 1. Fast path via coverId cache ────────────────────────────────
+        if (coverId && coverCache.has(coverId)) {
+            const albumId = coverCache.get(coverId);
+            const cached = albumIdTrackIdMap.get(makeTrackKey(albumId, rawTitle));
+            if (cached) return cached;
+        }
+
+        // ── 2. Album path ─────────────────────────────────────────────────
         let albumId = null;
-        if (coverCache.has(coverId)) {
-            albumId = coverCache.get(coverId);
-            logDebugInfo('[ALBUM RES]', 'Using cached album ID', albumId, 'for cover ID', coverId)
+        if (albumEl) {
+            const albumMatch = albumEl.getAttribute('href').match(/\/album\/(\d+)/);
+            albumId = albumMatch ? albumMatch[1] : null;
         } else {
-            logDebugInfo('[ALBUM RES]', 'No album match for', coverId)
-            if (albumEl) {
-                const albumMatch = albumEl.getAttribute('href').match(/\/album\/(\d+)/);
-                albumId = albumMatch ? albumMatch[1] : null;
-            } else {
-                // We're one an album page not a playlist
-                albumId = location.pathname.match(/\/album\/(\d+)/);
-            }
-            logDebugInfo('[ALBUM RES]', 'Album match:', albumId, albumEl);
-            if (!albumId) return null;
-            // Save coverId → albumId mapping for further use.
-            if (coverId) {
-                logDebugInfo('[ALBUM RES]', 'Saving album ID', albumId, 'for cover ID', coverId)
-                coverCache.set(coverId, albumId);
+            albumId = location.pathname.match(/\/album\/(\d+)/)?.[1] ?? null;
+        }
+
+        if (albumId) {
+            if (coverId && !coverCache.has(coverId)) coverCache.set(coverId, albumId);
+            const key = makeTrackKey(albumId, rawTitle);
+            if (albumIdTrackIdMap.has(key)) return albumIdTrackIdMap.get(key);
+
+            try {
+                const albumData = await fetchAlbumCached(albumId);
+                const match = (albumData.tracks || []).find(
+                    t => normalizeTrackKeyPart(t.title) === normalizeTrackKeyPart(rawTitle)
+                );
+                const trackId = match ? String(match.id) : null;
+                if (trackId) albumIdTrackIdMap.set(key, trackId);
+                return trackId;
+            } catch (e) {
+                if (DEBUG) logDebugInfo('[ROW RES]', 'Album fetch failed', e);
+                return UNRESOLVABLE;
             }
         }
 
-        let trackId = null;
-        const key = makeSimpleTrackKey(albumId, rawTitle)
-        if (albumIdTrackIdMap.has(key)) {
-            trackId = albumIdTrackIdMap.get(key);
-            logDebugInfo('[ALBUM RES]', 'Found cached track ID', trackId, 'for', key)
-            return trackId;
-        }
+        // ── 3. Search fallback (queue rows without album link) ────────────
+        if (!allowSearchFallback || !artistEl) return null;
 
+        const artistName = artistEl.textContent.trim();
+        const q = `track:"${rawTitle}" artist:"${artistName}"`;
         try {
-            logDebugInfo('[ALBUM RES]', 'Fetching album data for ID for album resolution', albumId)
-            const albumData = await fetchAlbumCached(albumId)
-            logDebugInfo('[ALBUM RES]', 'Fetched album data:', albumData)
-            logDebugInfo('[ALBUM RES]', 'Searching for track:', normalizeTrackKeyPart(rawTitle))
-            const match = (albumData.tracks || []).find(t => normalizeTrackKeyPart(t.title) === normalizeTrackKeyPart(rawTitle));
-            logDebugInfo('[ALBUM RES]', 'match found:', match);
-            const trackId = match ? String(match.id) : null;
-            if (trackId) {
-                albumIdTrackIdMap.set(key, trackId);
-            }
-            return trackId;
-        } catch (e) {
-            logDebugInfo('resolveTrackIdViaAlbum fetch error', e);
+            if (DEBUG) logDebugInfo('[ROW RES]', 'Search fallback for', q);
+            const resp = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=1`);
+            if (!resp.ok) return null;
+            const data = await resp.json();
+            const id = data.data?.[0]?.id;
+            const resolved = id != null ? String(id) : null;
+            if (!resolved && DEBUG) logDebugError('Search not found for', q, data);
+            return resolved;
+        } catch {
+            if (DEBUG) logDebugError('Search failed for', q);
             return null;
         }
     }
@@ -574,13 +539,10 @@
     // up the tree to find the direct child of the row's column container — any
     // ancestor with 3+ siblings is the column layout level we want.
     function findDurationCell(row) {
-        // Find the leaf element showing the track duration.
-        let el = [...row.querySelectorAll('*')].find(
-            e => !e.children.length && /^\d{1,2}:\d{2}$/.test(e.textContent.trim())
-        );
+        let el = row.querySelector('[data-testid="duration"]');
         if (!el) return null;
 
-        // Walk up to the column-level ancestor (first parent with 3+ children).
+        // Walk up to the column-level ancestor (first parent with 3+ siblings).
         while (el.parentElement && el.parentElement !== row) {
             if (el.parentElement.children.length >= 3) return el;
             el = el.parentElement;
@@ -601,6 +563,19 @@
                 if (existing) {
                     const currentKey = getRowKey(row);
                     if (existing.dataset.dbpmRowKey === currentKey) continue; // unchanged — skip
+
+                    // Row was recycled. If the new track's BPM is already cached,
+                    // update the span in place instantly to avoid any '…' flash.
+                    const cachedTrackId = existing.dataset.dbpmTrack;
+                    if (cachedTrackId) {
+                        const bpm = bpmCache.get(cachedTrackId);
+                        if (bpm !== undefined) {
+                            existing.dataset.dbpmRowKey = currentKey;
+                            existing.textContent = bpm != null ? String(bpm) : 'N/A';
+                            continue;
+                        }
+                    }
+
                     existing.remove(); // stale — remove and re-inject below
                 }
                 row.removeAttribute(INJECTED_ATTR);
@@ -621,12 +596,14 @@
                     span?.remove();
                     return;
                 }
-                if (!trackId) {
-                    row.removeAttribute(INJECTED_ATTR);
+                if (trackId == null) {
+                    // Transiently unresolvable (row not ready yet) — leave unmarked for retry.
+                    row.setAttribute(INJECTED_ATTR, '1');
                     if (span) span.textContent = '–';
                     return;
                 }
                 if (row.getAttribute(INJECTED_ATTR) !== 'pending') {
+                    // Another injection took over this row while we were awaiting.
                     span?.remove();
                     return;
                 }
@@ -634,15 +611,22 @@
                 row.setAttribute(INJECTED_ATTR, '1');
                 const rowKey = getRowKey(row) ?? trackId;
 
+                if (trackId === UNRESOLVABLE) {
+                    // Permanently failed — show '✕' and don't retry.
+                    if (span) {
+                        span.dataset.dbpmRowKey = rowKey;
+                        span.textContent = '✕';
+                    }
+                    return;
+                }
+
                 // Reuse the eager span if present, otherwise create one now.
                 const bpmSpan = span ?? createBpmSpan(row, {rowKey});
-                if (span) {
-                    span.dataset.dbpmRowKey = rowKey;
-                }
+                if (span) span.dataset.dbpmRowKey = rowKey;
                 bpmSpan.dataset.dbpmTrack = trackId;
 
                 fetchBpmCached(trackId).then(renderBpmValue(bpmSpan, trackId)).catch(err => {
-                    console.warn('[Deezer BPM] fetch error for track', trackId, err);
+                    if (DEBUG) console.warn('[Deezer BPM] fetch error for track', trackId, err);
                     if (bpmSpan.isConnected) bpmSpan.textContent = 'N/A';
                 });
             });
@@ -655,12 +639,12 @@
     // detecting when a row's track has changed and refreshing its BPM span.
     function injectPlaceholders() {
         // Guard: don't inject stale data if the page has already changed.
-        if (!currentTrackIds || currentPageUrl !== location.pathname) return;
+        if (!isTrackPage || currentPageUrl !== location.pathname) return;
 
         // Inject the BPM column header if not already present.
         injectColumnHeader();
 
-        injectBpmsIntoRows(document, resolveTrackIdViaAlbum, {
+        injectBpmsIntoRows(document, row => resolveRowTrackId(row), {
             eagerSpan: true,
             rowFilter: row =>
                 !row.closest('.player-queuelist') &&
@@ -724,63 +708,8 @@
         const titleEl = row.querySelector('[data-testid="title"]');
         const artistEl = row.querySelector('[data-testid="artist"]');
         const title = titleEl.textContent.trim();
-        const artistName = artistEl.textContent.trim();
+        const artistName = artistEl?.textContent.trim() ?? '';
         return makeTrackKey(title, artistName);
-    }
-
-    function getTrackIdFromCoverIdAndTitle(coverId, title) {
-        if (coverCache.has(coverId)) {
-            const albumId = coverCache.get(coverId);
-            logDebugInfo('Found cached album ID', albumId, 'from cover ID', coverId)
-            const trackId = albumIdTrackIdMap.get(makeSimpleTrackKey(albumId, title))
-            if (trackId) return trackId;
-        } else {
-            logDebugInfo('No cached album ID for cover ID', coverId)
-            logDebugInfo(coverCache)
-        }
-        return null;
-    }
-
-    // Resolve a track ID for a queue row purely from its DOM content.
-    // Tries the currentTrackMap first (free, no network), then falls back to a
-    // Deezer API search using the title and artist name visible in the row.
-    async function resolveQueueRowTrackId(row) {
-        const {titleEl, artistEl, albumEl, coverId} = await extractRowElementAsync(row);
-        logDebugInfo('[QUEUE ROW RES]', {titleEl, artistEl, albumEl, coverId}, 'for', row)
-        if (!titleEl || !artistEl) return null;
-
-        const title = titleEl.textContent.trim();
-        const artistName = artistEl.textContent.trim();
-        logDebugInfo('[QUEUE ROW RES]', 'Using queue row resolving mechanism for', title, 'by', artistName);
-        const rowKey = makeTrackKey(title, artistName);
-
-        let trackId = getTrackIdFromCoverIdAndTitle(coverId, title);
-        if (trackId) return trackId;
-
-        // if (queueTrackCache.has(rowKey)) return queueTrackCache.get(rowKey);
-        // logDebugInfo('[QUEUE ROW RES]', 'Queue row resolving mechanism cache miss');
-
-        // No map hit — search the Deezer API by title + artist name.
-        const q = `track:"${title}" artist:"${artistName}"`;
-        try {
-            // TODO: Notify that id is not precise
-            //  Should be colored in a specific color
-            //  Should be retried at some point
-            //  Could be shown as a clickable button that can be retried
-            logDebugInfo('[QUEUE ROW RES]', 'Searching for track', q);
-            const resp = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=1`);
-            if (!resp.ok) return null;
-            const data = await resp.json();
-            const id = data.data?.[0]?.id;
-            const resolved = id != null ? String(id) : null;
-            if (resolved) queueTrackCache.set(rowKey, resolved); // cache for future scroll recycling
-            else logDebugError('Deezer API search not found for ', q, data);
-            return resolved;
-        } catch {
-            logDebugError('Deezer API search failed for', q);
-            return null;
-            return null;
-        }
     }
 
     function renderBpmValue(span, trackId) {
@@ -790,36 +719,6 @@
             if (bpm != null) span.classList.add(`${INLINE_CLASS}--loaded`)
             else span.classList.add(`${INLINE_CLASS}--unknown`);
         };
-    }
-
-    // Create and insert a BPM span into `row` for the given `trackId`.
-    // `rowKey` is an optional title+artist key stored on the span for
-    // staleness detection when rows are recycled during virtual scrolling.
-    // `errorText` is the text shown in the span if the BPM fetch fails.
-    function injectBpmSpanIntoRow(row, trackId, {rowKey = null, errorText = 'N/A'} = {}) {
-        const span = document.createElement('span');
-        span.className = INLINE_CLASS;
-        span.dataset.dbpmTrack = trackId;
-        if (rowKey != null) span.dataset.dbpmRowKey = rowKey;
-        span.textContent = '…';
-
-        const durationCell = findDurationCell(row);
-        if (durationCell) durationCell.before(span);
-        else row.appendChild(span);
-
-        fetchBpmCached(trackId).then(renderBpmValue(span, trackId)).catch(err => {
-            console.warn('[Deezer BPM] fetch error for track', trackId, err);
-            if (span.isConnected) span.textContent = errorText;
-        });
-    }
-
-    function injectBpmSpanIntoRow2(row, trackId, {rowKey = null, errorText = 'N/A'} = {}) {
-        const span = createBpmSpan(row, {rowKey});
-        span.dataset.dbpmTrack = trackId;
-        fetchBpmCached(trackId).then(renderBpmValue(span, trackId)).catch(err => {
-            console.warn('[Deezer BPM] fetch error for track', trackId, err);
-            if (span.isConnected) span.textContent = errorText;
-        });
     }
 
     function createBpmSpan(row, {rowKey = null} = {}) {
@@ -839,7 +738,7 @@
         const queueContainer = document.querySelector('.player-queuelist');
         if (!queueContainer) return;
 
-        injectBpmsIntoRows(queueContainer, resolveQueueRowTrackId, {
+        injectBpmsIntoRows(queueContainer, row => resolveRowTrackId(row, {allowSearchFallback: true}), {
             eagerSpan: true,
         })
     }
@@ -869,7 +768,7 @@
             // album), trigger a full reload of track IDs before injecting.
             // This is the primary navigation detection path — it doesn't rely on URL
             // change events, which can be missed in SPAs.
-            if (!currentTrackIds || currentPageUrl !== location.pathname) {
+            if (currentPageUrl !== location.pathname) {
                 injectPlaylistBpms();
             } else {
                 injectPlaceholders();
@@ -960,7 +859,7 @@
         if (!playlistModeEnabled || isLoadingTrackIds) return;
         if (currentPageUrl !== location.pathname) {
             injectPlaylistBpms();
-        } else if (currentTrackIds) {
+        } else if (isTrackPage) {
             injectPlaceholders(); // re-check rows in case they were sorted in-place
         }
     }, 2500);
