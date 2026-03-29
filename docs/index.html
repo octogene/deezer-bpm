@@ -463,6 +463,66 @@
       </div>
     </div>
 
+    <div class="faq-item">
+      <button class="faq-question" aria-expanded="false">
+        Why are BPM values in the queue list sometimes different from the badge or from what they were before?
+        <span class="faq-chevron">▼</span>
+      </button>
+      <div class="faq-answer" role="region">
+        <span class="faq-label">In short</span>
+        <p>
+          The badge, the playlist/album page and the queue rows identify tracks through different paths.
+          When they haven't been seen before, queue rows may resolve to a different version
+          of the same track — for example a single release instead of the album version —
+          which can carry a slightly different BPM value.
+        </p>
+        <span class="faq-label" style="margin-top: 16px; display: inline-block;">For the curious</span>
+        <p>
+          The badge identifies the currently playing track by reading the album link directly
+          from the player bar, then matching the track title against that album's track list.
+          Queue rows don't have an album link in their DOM, so when no cached result
+          is available the extension falls back to a title + artist search via the Deezer API,
+          which may return a different release of the same song.
+        </p>
+        <p>
+          Once a track has been resolved once, the result is cached and reused on subsequent
+          visits, so the values stabilise over time. Clearing the extension cache
+          (via the browser's extension storage) resets all resolutions and may cause the
+          discrepancy to reappear temporarily.
+        </p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-question" aria-expanded="false">
+        Why do BPM values in the queue list sometimes take longer to appear?
+        <span class="faq-chevron">▼</span>
+      </button>
+      <div class="faq-answer" role="region">
+        <span class="faq-label">In short</span>
+        <p>
+          Queue rows that haven't been seen before require an extra search API call to identify
+          the track, and that result isn't always cached — so the same lookup may happen again
+          next time.
+        </p>
+        <span class="faq-label" style="margin-top: 16px; display: inline-block;">For the curious</span>
+        <p>
+          When a queue row has no album link in its DOM and no prior cached entry, the extension
+          queries the Deezer search API using the track title and artist name. This is slower
+          than a direct album lookup, and search results are only cached when the extension
+          can confidently match the result to the cover image shown in the row. If the match
+          isn't considered exact enough, the result is discarded and the search will run again
+          on the next visit.
+        </p>
+        <p>
+          Tracks that have been seen in a playlist or album page first are resolved through a
+          faster path and will always display their BPM instantly in the queue, since their
+          track ID is already known from that earlier visit.
+        </p>
+      </div>
+    </div>
+
+
   </section>
 
   <section class="contact">
