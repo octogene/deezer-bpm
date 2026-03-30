@@ -44,11 +44,13 @@
     //   disable: localStorage.removeItem('deezerBpmDebug')
     const logDebugInfo = DEBUG
         ? console.log.bind(console, '%c[Deezer BPM]', 'color: white; background: #7B2FBE; border-radius: 3px; font-weight: bold')
-        : () => {};
+        : () => {
+        };
 
     const logDebugError = DEBUG
         ? console.log.bind(console, '%c[Deezer BPM]', 'color: white; background: red; border-radius: 3px; font-weight: bold')
-        : () => {};
+        : () => {
+        };
 
     async function checkCacheClear() {
         try {
@@ -430,7 +432,8 @@
     // Inspect the current URL and determine if this is a playlist or album page.
     // Returns true if BPM injection should proceed, false otherwise.
     function detectPageType() {
-        return /\/(playlist|album)\/\d+/.test(location.pathname);
+        return /\/(playlist|album)\/\d+/.test(location.pathname)
+            || /\/search\/[^/]+(\/track)?$/.test(location.pathname);
     }
 
     // ── Deezer API – fetch ordered track IDs for current playlist/album ───────
@@ -584,7 +587,7 @@
                 }
                 if (!allowSearchFallback) return trackId;
             } catch (e) {
-                if (DEBUG) logDebugInfo('[ROW RES]', 'Album fetch failed', e);
+                if (DEBUG) logDebugError('[ROW RES]', 'Album fetch failed', e);
                 if (!allowSearchFallback) return UNRESOLVABLE;
             }
         } else {
@@ -616,7 +619,7 @@
                     if (DEBUG) logDebugInfo('[ROW RES]', 'Search hit:', trackId, '. Caching it...');
                     coverTrackCache.set(key, trackId);
                 } else {
-                    if (DEBUG) logDebugInfo('[ROW RES]', 'Search hit ', trackId, 'for ', query, 'and cover', coverId, '. Not caching it.');
+                    if (DEBUG) logDebugError('[ROW RES]', 'Search miss ', trackId, 'for ', query, 'and cover', coverId, '. Not caching it.');
                 }
                 return trackId;
             } catch {
@@ -753,8 +756,12 @@
             eagerSpan: true,
             rowFilter: row =>
                 !row.closest('.player-queuelist') &&
+                // Ignore non-track row (no song title)
                 !!row.querySelector('[data-testid="title"]') &&
-                !row.querySelector('button[aria-label="Add track"]'),
+                // Ignore playlist track suggestions row
+                !row.querySelector('button[aria-label="Add track"]') &&
+                // Ignore podcasts row
+                !row.querySelector('[data-testid="show"]'),
         });
     }
 
