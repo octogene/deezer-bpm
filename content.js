@@ -353,7 +353,7 @@
             const bpm = await fetchBpmCached(trackId);
             if (callId !== badgeUpdateId) return; // superseded while waiting for BPM
             logDebugInfo('Fetched track BPM:', bpm);
-            setBadgeValue(bpm ?? 'N/A', bpm != null);
+            setBadgeValue(bpm ?? 'N/A', bpm !== null);
         } catch (err) {
             logDebugError('[BADGE] Failed to update', err);
             setBadgeValue('✕');
@@ -474,7 +474,7 @@
             await new Promise(r => setTimeout(r, 50));
             if (!row.isConnected) break; // row was removed while we waited
             const retried = extractRowElement(row);
-            if (retried.coverId != null && retried.coverId !== COVER_PLACEHOLDER_ID) return retried;
+            if (retried.coverId !== null && retried.coverId !== COVER_PLACEHOLDER_ID) return retried;
         }
         return result; // return whatever we have, coverId may still be null
     }
@@ -592,7 +592,7 @@
                 const results = data.data || [];
                 // Try to find a result whose cover image matches the row's cover.
                 const match = results.find(r => r.md5_image === coverId) ?? results[0];
-                const trackId = match?.id != null ? String(match.id) : UNRESOLVABLE;
+                const trackId = match?.id !== null ? String(match.id) : UNRESOLVABLE;
                 // Exact match found, cache it.
                 if (trackId !== UNRESOLVABLE) {
                     if (DEBUG) logDebugInfo('[ROW RES]', 'Search hit:', trackId, '. Caching it...');
@@ -658,7 +658,7 @@
                         const bpm = bpmCache.get(cachedTrackId);
                         if (bpm !== undefined) {
                             existing.dataset.dbpmRowKey = currentKey;
-                            existing.textContent = bpm != null ? String(bpm) : 'N/A';
+                            existing.textContent = bpm !== null ? String(bpm) : 'N/A';
                             continue;
                         }
                     }
@@ -683,7 +683,7 @@
                     span?.remove();
                     return;
                 }
-                if (trackId == null) {
+                if (trackId === null) {
                     // Transiently unresolvable (row not ready yet) — leave unmarked for retry.
                     row.setAttribute(INJECTED_ATTR, '1');
                     if (span) span.textContent = '–';
@@ -802,8 +802,8 @@
     function renderBpmValue(span, trackId) {
         return bpm => {
             if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
-            span.textContent = bpm != null ? String(bpm) : 'N/A';
-            if (bpm != null) span.classList.add(`${INLINE_CLASS}--loaded`)
+            span.textContent = bpm !== null ? String(bpm) : 'N/A';
+            if (bpm !== null) span.classList.add(`${INLINE_CLASS}--loaded`)
             else span.classList.add(`${INLINE_CLASS}--unknown`);
         };
     }
@@ -811,7 +811,7 @@
     function createBpmSpan(row, {rowKey = null} = {}) {
         const span = document.createElement('span');
         span.className = INLINE_CLASS;
-        if (rowKey != null) span.dataset.dbpmRowKey = rowKey;
+        if (rowKey !== null) span.dataset.dbpmRowKey = rowKey;
         span.textContent = '…';
 
         const durationCell = findDurationCell(row);
