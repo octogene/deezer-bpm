@@ -494,6 +494,19 @@
         return coverId !== COVER_PLACEHOLDER_ID ? coverId : null;
     }
 
+    function findTrackMatch(tracks, rawTitle) {
+        const normalized = normalizeTrackKeyPart(rawTitle);
+        return tracks.find(t => {
+            const apiNorm = normalizeTrackKeyPart(t.title);
+            if (apiNorm === normalized) return true;
+            // Fallback for some cases where the API provides a different title format than
+            // the DOM.
+            // Try stripping a leading "prefix : " from the API title
+            const stripped = apiNorm.replace(/^.+\s:\s/, '');
+            return stripped === normalized;
+        });
+    }
+
     // Resolve a track ID for a row. Strategy:
     // 1. Fast path: check albumIdTrackIdMap via coverId (free, no network)
     // 2. Album path: fetch the album tracklist and match by title
@@ -523,9 +536,7 @@
                 logDebugInfo('[ROW RES]', 'Album cache hit:', albumId, rawTitle);
                 const albumData = albumCache.get(albumId);
                 if (albumData) {
-                    const match = albumData.tracks.find(
-                        t => normalizeTrackKeyPart(t.title) === normalizeTrackKeyPart(rawTitle)
-                    );
+                    const match = findTrackMatch(albumData.tracks, rawTitle);
                     const trackId = match ? String(match.id) : null;
                     if (trackId) {
                         logDebugInfo('[ROW RES]', 'Track cache hit:', key);
