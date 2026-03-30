@@ -43,14 +43,12 @@
     //   enable:  localStorage.setItem('deezerBpmDebug', '1')
     //   disable: localStorage.removeItem('deezerBpmDebug')
     const logDebugInfo = DEBUG
-        ? (msg, ...args) => console.log('%c[Deezer BPM]', 'color: white; background: #7B2FBE; border-radius: 3px; font-weight: bold', msg, ...args)
-        : () => {
-        };
+        ? console.log.bind(console, '%c[Deezer BPM]', 'color: white; background: #7B2FBE; border-radius: 3px; font-weight: bold')
+        : () => {};
 
     const logDebugError = DEBUG
-        ? (msg, ...args) => console.log('%c[Deezer BPM]', 'color: white; background: red; border-radius: 3px; font-weight: bold', msg, ...args)
-        : () => {
-        };
+        ? console.log.bind(console, '%c[Deezer BPM]', 'color: white; background: red; border-radius: 3px; font-weight: bold')
+        : () => {};
 
     async function checkCacheClear() {
         try {
