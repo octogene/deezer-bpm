@@ -522,6 +522,36 @@
       </div>
     </div>
 
+    <div class="faq-item">
+      <button class="faq-question" aria-expanded="false">
+        Why do some tracks show a ✕ instead of a BPM value?
+        <span class="faq-chevron">▼</span>
+      </button>
+      <div class="faq-answer" role="region">
+        <span class="faq-label">In short</span>
+        <p>
+          A ✕ means the extension was unable to identify the track after exhausting all available
+          strategies. The row won't be retried until you reload the page.
+        </p>
+        <span class="faq-label" style="margin-top: 16px; display: inline-block;">For the curious</span>
+        <p>
+          To show a BPM, the extension must first resolve the track to a Deezer track ID. It tries
+          several strategies in order: a fast cover-image cache lookup, then fetching the album's
+          track list and matching by title, and finally a title + artist search via the Deezer API
+          (used for queue rows that have no album link). A ✕ appears when all of these fail — for
+          example because the track title in the DOM doesn't closely match anything the API returns,
+          the cover image hasn't loaded in time, or the Deezer API itself returned an error.
+        </p>
+        <p>
+          Reloading the page often fixes the issue, as cover images and DOM metadata may be fully
+          available on a second pass. Scrolling the problematic track out of view and back can also
+          trigger a fresh resolution attempt, since Deezer recycles list rows as you scroll and the
+          extension will retry any row that re-enters the viewport. Note that ✕ is different from
+          "N/A": N/A means the track <em>was</em> identified but Deezer simply has no BPM data for it.
+        </p>
+      </div>
+    </div>
+
 
   </section>
 
