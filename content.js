@@ -102,14 +102,23 @@
     }
 
     function persistCaches() {
-        const bpmEntries = [...bpmCache.entries()].slice(-MAX_CACHE_SIZE);
-        const coverEntries = [...coverCache.entries()].slice(-MAX_CACHE_SIZE);
-        const coverTrackEntries = [...coverTrackCache.entries()].slice(-MAX_CACHE_SIZE);
+        const bpmEntries = trimMapToMaxSize(bpmCache, MAX_CACHE_SIZE);
+        const coverEntries = trimMapToMaxSize(coverCache, MAX_CACHE_SIZE);
+        const coverTrackEntries = trimMapToMaxSize(coverTrackCache, MAX_CACHE_SIZE);
+
         storageApi.local.set({
             [BPM_CACHE_STORAGE_KEY]: Object.fromEntries(bpmEntries),
             [COVER_CACHE_STORAGE_KEY]: Object.fromEntries(coverEntries),
             [COVER_TRACK_CACHE_STORAGE_KEY]: Object.fromEntries(coverTrackEntries),
         }).catch(e => console.warn('[Deezer BPM] Could not persist cache:', e));
+    }
+
+    function trimMapToMaxSize(map, maxSize) {
+        while (map.size > maxSize) {
+            const oldestKey = map.keys().next().value;
+            map.delete(oldestKey);
+        }
+        return map;
     }
 
     // ── Fetch queue (max 3 concurrent requests) ───────────────────────────────
