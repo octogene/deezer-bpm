@@ -264,7 +264,7 @@
       padding: 0 24px;
     }
     .faq-item.open .faq-answer {
-      max-height: 400px;
+      max-height: 500px;
       padding: 0 24px 20px;
     }
 
@@ -366,9 +366,6 @@
       <a class="btn btn-secondary soon" aria-disabled="true">
         🌐 Chrome Web Store <span style="font-size:.8rem;opacity:.7">— Soon…</span>
       </a>
-<!--      <a class="btn btn-secondary" href="https://github.com/octogene/deezer-bpm">-->
-<!--        GitHub →-->
-<!--      </a>-->
     </div>
   </section>
 
@@ -399,41 +396,47 @@
     </div>
   </section>
 
-<!--  <section class="install">-->
-<!--    <h2>Installation</h2>-->
-<!--    <div class="install-grid">-->
 
-<!--      <div class="install-card">-->
-<!--        <h3>🦊 Firefox</h3>-->
-<!--        <ol>-->
-<!--          <li>Download the <code>.xpi</code> file below</li>-->
-<!--          <li>Open Firefox → <code>about:addons</code></li>-->
-<!--          <li>Gear icon → <em>Install Add-on From File…</em></li>-->
-<!--          <li>Select the downloaded <code>.xpi</code></li>-->
-<!--        </ol>-->
-<!--        <a class="download-btn soon" aria-disabled="true">-->
-<!--          🦊 Firefox Add-ons <span class="soon-tag">— Soon…</span>-->
-<!--        </a>-->
-<!--      </div>-->
-
-<!--      <div class="install-card">-->
-<!--        <h3>🌐 Chrome</h3>-->
-<!--        <ol>-->
-<!--          <li>Download the <code>.zip</code> file below and unzip it</li>-->
-<!--          <li>Open Chrome → <code>chrome://extensions</code></li>-->
-<!--          <li>Enable <em>Developer mode</em></li>-->
-<!--          <li>Click <em>Load unpacked</em> and select the folder</li>-->
-<!--        </ol>-->
-<!--        <a class="download-btn soon" aria-disabled="true">-->
-<!--          🌐 Chrome Web Store <span class="soon-tag">— Soon…</span>-->
-<!--        </a>-->
-<!--      </div>-->
-
-<!--    </div>-->
-<!--  </section>-->
 
   <section class="faq">
     <h2>FAQ</h2>
+
+    <div class="faq-item">
+      <button class="faq-question" aria-expanded="false">
+        Some BPM values look incorrect — is that a bug?
+        <span class="faq-chevron">▼</span>
+      </button>
+      <div class="faq-answer" role="region">
+        <span class="faq-label">In short</span>
+        <p>
+          If the extension identified the track correctly, the BPM value it shows is exactly
+          what Deezer's API reports for that track. An incorrect-looking value is most likely
+          inaccurate data on Deezer's side, not a resolution error.
+        </p>
+        <span class="faq-label" style="margin-top: 16px; display: inline-block;">For the curious</span>
+        <p>
+          The extension does not compute or estimate BPM itself — it fetches the value directly
+          from the public Deezer API. When the track has been identified with confidence (exact
+          title match against the album's track list), the number displayed is the one Deezer
+          has on record. Considering Deezer's BPM data comes from audio analysis and
+          is not always accurate: values can be halved or doubled, rounded imprecisely, or simply
+          wrong for some tracks.
+        </p>
+        <p>
+          A good example is <em>Alberto Balsam</em> by Aphex Twin, which Deezer reports at
+          roughly 188 BPM. The track actually sits around 94–96 BPM — the analyser locked onto
+          double the real tempo, a common error with relaxed or syncopated grooves where the beat
+          can be interpreted at two different levels.
+        </p>
+        <p>
+          If a value looks off, try cross-referencing it with another source such as
+          <a href="https://www.tunebat.com" target="_blank" rel="noopener">Tunebat</a> or
+          <a href="https://songbpm.com" target="_blank" rel="noopener">SongBPM</a>.
+          If those agree with Deezer, the value is likely correct. If they consistently
+          disagree, the inaccuracy is in Deezer's data and cannot be corrected by the extension.
+        </p>
+      </div>
+    </div>
 
     <div class="faq-item">
       <button class="faq-question" aria-expanded="false">
