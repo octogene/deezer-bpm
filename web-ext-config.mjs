@@ -7,5 +7,8 @@ export default {
     '.github/',
     '.idea/',
     'web-ext-config.mjs',
+    'eslint.config.mjs',
+    'package.json',
+    'package-lock.json',
   ],
 };

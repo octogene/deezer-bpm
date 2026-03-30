@@ -1,0 +1,11 @@
+{
+  "name": "deezer-bpm",
+  "private": true,
+  "scripts": {
+    "lint:js": "eslint content.js web-ext-config.mjs"
+  },
+  "devDependencies": {
+    "eslint": "^10.1.0",
+    "globals": "^17.4.0"
+  }
+}
