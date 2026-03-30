@@ -463,6 +463,36 @@
       </div>
     </div>
 
+    <div class="faq-item">
+      <button class="faq-question" aria-expanded="false">
+        Why are BPM values in the queue list sometimes different from the badge or from what they were before?
+        <span class="faq-chevron">▼</span>
+      </button>
+      <div class="faq-answer" role="region">
+        <span class="faq-label">In short</span>
+        <p>
+          The badge, the playlist/album page and the queue rows identify tracks through different paths.
+          When they haven't been seen before, queue rows may resolve to a different version
+          of the same track — for example a single release instead of the album version —
+          which can carry a slightly different BPM value.
+        </p>
+        <span class="faq-label" style="margin-top: 16px; display: inline-block;">For the curious</span>
+        <p>
+          The badge identifies the currently playing track by reading the album link directly
+          from the player bar, then matching the track title against that album's track list.
+          Queue rows don't have an album link in their DOM, so when no cached result
+          is available the extension falls back to a title + artist search via the Deezer API,
+          which may return a different release of the same song.
+        </p>
+        <p>
+          Once a track has been resolved once, the result is cached and reused on subsequent
+          visits, so the values stabilise over time. Clearing the extension cache
+          (via the browser's extension storage) resets all resolutions and may cause the
+          discrepancy to reappear temporarily.
+        </p>
+      </div>
+    </div>
+
   </section>
 
   <section class="contact">
