@@ -7,6 +7,7 @@
     const INLINE_CLASS = 'dbpm-inline';         // class on each per-row BPM span
     const HEADER_CLASS = 'dbpm-header';         // class on the injected BPM column header
     const INJECTED_ATTR = 'data-dbpm-injected';  // attribute we set on rows we already processed
+    const ROW_KEY_ATTR = 'data-dbpm-key';     // aria-rowindex value at last injection time
     const STORAGE_KEY = 'deezerBpmPlaylistMode'; // localStorage key for playlist mode preference
     const COVER_PLACEHOLDER_ID = 'd41d8cd98f00b204e9800998ecf8427e' // hash of the cover image placeholder
     const UNRESOLVABLE = Symbol('unresolvable'); // returned by resolvers to permanently skip a row
@@ -474,14 +475,14 @@
 
     // Waits until the cover image src is populated (up to `maxWait` ms),
     // then returns the row elements including a resolved coverId.
-    async function extractRowElementAsync(row, maxWait = 800) {
+    async function extractRowElementAsync(row, maxWait = 150) {
         const result = extractRowElement(row);
         if (result.coverId) return result;
 
         // Cover ID not yet available — poll briefly for it.
         const deadline = Date.now() + maxWait;
         while (Date.now() < deadline) {
-            await new Promise(r => setTimeout(r, 50));
+            await new Promise(r => setTimeout(r, 16));
             if (!row.isConnected) break; // row was removed while we waited
             const retried = extractRowElement(row);
             if (retried.coverId !== null && retried.coverId !== COVER_PLACEHOLDER_ID) return retried;
@@ -659,27 +660,31 @@
         rowFilter = null,
         eagerSpan = false
     } = {}) {
-        const rows = [...container.querySelectorAll('[role="row"][aria-rowindex]')];
 
-        for (const row of rows) {
+        for (const row of container.querySelectorAll('[role="row"][aria-rowindex]')) {
             const injectedAttr = row.getAttribute(INJECTED_ATTR);
 
             if (injectedAttr === 'pending') continue;
 
             if (injectedAttr === '1') {
+                const currentKey = getRowKey(row);
+
+                // Cheap check: key is stored on the row itself, no querySelector needed.
+                if (row.getAttribute(ROW_KEY_ATTR) === currentKey) continue;
+
+                // Check filter before doing any more work on recycled rows.
+                if (rowFilter && !rowFilter(row)) continue;
+
                 const existing = row.querySelector(`.${INLINE_CLASS}`);
                 if (existing) {
-                    const currentKey = getRowKey(row);
-                    if (existing.dataset.dbpmRowKey === currentKey) continue; // unchanged — skip
-
-                    // Row was recycled. If the new track's BPM is already cached,
-                    // update the span in place instantly to avoid any '…' flash.
-                    const cachedTrackId = existing.dataset.dbpmTrack;
-                    if (cachedTrackId) {
-                        const bpm = bpmCache.get(cachedTrackId);
+                    const newTrackId = coverTrackCache.get(currentKey);
+                    if (newTrackId) {
+                        const bpm = bpmCache.get(newTrackId);
                         if (bpm !== undefined) {
                             existing.dataset.dbpmRowKey = currentKey;
-                            existing.textContent = bpm !== null ? String(bpm) : 'N/A';
+                            existing.dataset.dbpmTrack = newTrackId;
+                            row.setAttribute(ROW_KEY_ATTR, currentKey);
+                            renderBpmValue(existing, newTrackId)(bpm);
                             continue;
                         }
                     }
@@ -687,12 +692,16 @@
                     existing.remove(); // stale — remove and re-inject below
                 }
                 row.removeAttribute(INJECTED_ATTR);
+                row.removeAttribute(ROW_KEY_ATTR);
             }
 
             if (rowFilter && !rowFilter(row)) continue;
 
             // Claim the row synchronously to prevent concurrent injection.
             row.setAttribute(INJECTED_ATTR, 'pending');
+
+            // Capture the key now so the async callback doesn't need to recompute it.
+            const pendingRowKey = getRowKey(row);
 
             // When eagerSpan is true, insert the placeholder span immediately
             // (before any await) so '…' appears for all rows at once.
@@ -701,6 +710,7 @@
             resolveTrackId(row).then(trackId => {
                 if (!row.isConnected) {
                     row.removeAttribute(INJECTED_ATTR);
+                    row.removeAttribute(ROW_KEY_ATTR);
                     span?.remove();
                     return;
                 }
@@ -717,20 +727,20 @@
                 }
 
                 row.setAttribute(INJECTED_ATTR, '1');
-                const rowKey = getRowKey(row) ?? trackId;
+                row.setAttribute(ROW_KEY_ATTR, pendingRowKey);
 
                 if (trackId === UNRESOLVABLE) {
                     // Permanently failed — show '✕' and don't retry.
                     if (span) {
-                        span.dataset.dbpmRowKey = rowKey;
+                        span.dataset.dbpmRowKey = pendingRowKey;
                         span.textContent = '✕';
                     }
                     return;
                 }
 
                 // Reuse the eager span if present, otherwise create one now.
-                const bpmSpan = span ?? createBpmSpan(row, {rowKey});
-                if (span) span.dataset.dbpmRowKey = rowKey;
+                const bpmSpan = span ?? createBpmSpan(row, {rowKey : pendingRowKey});
+                if (span) span.dataset.dbpmRowKey = pendingRowKey;
                 bpmSpan.dataset.dbpmTrack = trackId;
 
                 fetchBpmCached(trackId).then(renderBpmValue(bpmSpan, trackId)).catch(err => {
@@ -769,7 +779,10 @@
     // so they will be re-injected if playlist mode is turned back on.
     function removePlaylistBpms() {
         document.querySelectorAll(`.${INLINE_CLASS}, .${HEADER_CLASS}`).forEach(el => el.remove());
-        document.querySelectorAll(`[${INJECTED_ATTR}]`).forEach(el => el.removeAttribute(INJECTED_ATTR));
+        document.querySelectorAll(`[${INJECTED_ATTR}]`).forEach(el => {
+            el.removeAttribute(INJECTED_ATTR);
+            el.removeAttribute(ROW_KEY_ATTR);
+        });
     }
 
     // Inject a "BPM" columnheader into the playlist header row, positioned just
@@ -818,18 +831,19 @@
 
     function getRowKey(row) {
         const titleEl = row.querySelector('[data-testid="title"]');
-        const artistEl = row.querySelector('[data-testid="artist"]');
-        const title = titleEl.textContent.trim();
-        const artistName = artistEl?.textContent.trim() ?? '';
-        return makeTrackKey(title, artistName);
+        const coverImg = row.querySelector('[data-testid="cover"] img');
+        const title = titleEl?.textContent.trim() ?? '';
+        const coverMatch = coverImg?.getAttribute('src')?.match(/\/images\/cover\/([a-f0-9]+)\//);
+        const coverId = coverMatch?.[1] ?? '';
+        return makeCoverTrackKey(coverId, title);
     }
 
     function renderBpmValue(span, trackId) {
         return bpm => {
             if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
             span.textContent = bpm !== null ? String(bpm) : 'N/A';
-            if (bpm !== null) span.classList.add(`${INLINE_CLASS}--loaded`)
-            else span.classList.add(`${INLINE_CLASS}--unknown`);
+            span.classList.toggle(`${INLINE_CLASS}--loaded`, bpm !== null);
+            span.classList.toggle(`${INLINE_CLASS}--unknown`, bpm === null);
         };
     }
 
