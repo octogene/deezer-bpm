@@ -458,11 +458,6 @@
         return coverId + '\0' + normalizeTrackKeyPart(title);
     }
 
-    function makeTrackKey(title, artistId) {
-        const parts = [normalizeTrackKeyPart(title), normalizeTrackKeyPart(artistId)];
-        return parts.join('\0');
-    }
-
     function extractRowElement(row) {
         const coverImg = row.querySelector('[data-testid="cover"] img');
         const titleEl = row.querySelector('[data-testid="title"]');
