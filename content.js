@@ -940,6 +940,7 @@
 
     function setupMiniplayerObserver(miniplayerEl) {
         let lastPlayerTitle = null;
+        let miniplayerTimer = null;
         new MutationObserver(() => {
             const anchor = miniplayerEl.querySelector('[data-testid="item_title"] a[href*="/album/"]');
             const title = anchor?.textContent ?? null;
@@ -947,7 +948,8 @@
             logDebugInfo("[MINIPLAYER] title changed", lastPlayerTitle, '->', title);
             lastPlayerTitle = title;
             currentTrackId = null;
-            updatePlayerBadge();
+            clearTimeout(miniplayerTimer);
+            miniplayerTimer = setTimeout(updatePlayerBadge, 150);
         }).observe(miniplayerEl, {childList: true, subtree: true, characterData: true});
     }
 
