@@ -780,16 +780,16 @@
         // Use findDurationCell on a live data row to detect which column index
         // holds the duration, then insert the BPM header before that column header.
         let durationHeader = null;
-        const sampleRow = document.querySelector('[role="row"][aria-rowindex]');
-        if (sampleRow) {
-            const durationCell = findDurationCell(sampleRow);
-            if (durationCell) {
-                const colIndex = [...durationCell.parentElement.children].indexOf(durationCell);
-                logDebugInfo("Found duration cell column index ", colIndex)
-                if (colIndex >= 0 && colIndex < headers.length) {
-                    durationHeader = headers[colIndex];
-                }
+        const durationCell = [...document.querySelectorAll('[role="row"][aria-rowindex]')]
+            .reduce((found, row) => found ?? findDurationCell(row), null);
+        if (durationCell) {
+            const colIndex = [...durationCell.parentElement.children].indexOf(durationCell);
+            logDebugInfo("Found duration cell column index ", colIndex)
+            if (colIndex >= 0 && colIndex < headers.length) {
+                durationHeader = headers[colIndex];
             }
+        } else {
+            logDebugError("Could not find duration cell in sample row", headers);
         }
         if (!durationHeader) return;
 
