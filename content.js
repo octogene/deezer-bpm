@@ -98,8 +98,11 @@
     let saveDebounce = null;
 
     function scheduleSaveCache() {
-        clearTimeout(saveDebounce);
-        saveDebounce = setTimeout(persistCaches, 2000);
+        if (saveDebounce !== null) return; // timer already pending, let it fire
+        saveDebounce = setTimeout(() => {
+            saveDebounce = null;
+            persistCaches();
+        }, 2000);
     }
 
     function persistCaches() {
