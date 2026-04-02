@@ -12,16 +12,46 @@
     const COVER_PLACEHOLDER_ID = 'd41d8cd98f00b204e9800998ecf8427e' // hash of the cover image placeholder
     const UNRESOLVABLE = Symbol('unresolvable'); // returned by resolvers to permanently skip a row
 
+    class LruMap extends Map {
+        constructor(maxSize, entries) {
+            super(entries);
+            this.maxSize = maxSize;
+            this.evictOverflow();
+        }
+
+        get(key) {
+            if (!super.has(key)) return undefined;
+            const value = super.get(key);
+            super.delete(key);
+            super.set(key, value);
+            return value;
+        }
+
+        set(key, value) {
+            if (super.has(key)) super.delete(key);
+            super.set(key, value);
+            this.evictOverflow();
+            return this;
+        }
+
+        evictOverflow() {
+            while (this.size > this.maxSize) {
+                const oldestKey = this.keys().next().value;
+                super.delete(oldestKey);
+            }
+        }
+    }
+
     // ── Persistent BPM cache ─────────────────────────────────────────────────
     // We cache BPM values so we never fetch the same track twice, even across
     // page reloads. The in-memory Map is populated from extension storage at
     // startup and written back after every new fetch.
 
-    const bpmCache = new Map(); // trackId (string) → number|null
-    const coverCache = new Map(); // coverId (string) → albumId (string|null)
+    const bpmCache = new LruMap(MAX_CACHE_SIZE); // trackId (string) → number|null
+    const coverCache = new LruMap(MAX_CACHE_SIZE); // coverId (string) → albumId (string|null)
     const inFlight = new Map(); // inFlightId (string) → Promise
-    const albumCache = new Map(); // coverId (string) → albumData
-    const coverTrackCache = new Map(); // coverId+trackTitle (string) → trackId (string|null)
+    const albumCache = new LruMap(MAX_CACHE_SIZE); // coverId (string) → albumData
+    const coverTrackCache = new LruMap(MAX_CACHE_SIZE); // coverId+trackTitle (string) → trackId (string|null)
     // Tracks requests that are currently in-flight so
     // two callers asking for the same track share one fetch.
 
@@ -97,23 +127,24 @@
     // only triggers one write instead of hundreds.
     let saveDebounce = null;
 
+    const runWhenIdle = window.requestIdleCallback
+        ? callback => window.requestIdleCallback(callback, {timeout: 2000})
+        : callback => setTimeout(callback, 0);
+
     function scheduleSaveCache() {
         if (saveDebounce !== null) return; // timer already pending, let it fire
         saveDebounce = setTimeout(() => {
             saveDebounce = null;
-            persistCaches();
+            runWhenIdle(() => persistCaches());
         }, 2000);
     }
 
     function persistCaches() {
-        const bpmEntries = trimMapToMaxSize(bpmCache, MAX_CACHE_SIZE);
-        const coverEntries = trimMapToMaxSize(coverCache, MAX_CACHE_SIZE);
-        const coverTrackEntries = trimMapToMaxSize(coverTrackCache, MAX_CACHE_SIZE);
-
+        logDebugInfo('[CACHE] Persisting caches');
         storageApi.local.set({
-            [BPM_CACHE_STORAGE_KEY]: Object.fromEntries(bpmEntries),
-            [COVER_CACHE_STORAGE_KEY]: Object.fromEntries(coverEntries),
-            [COVER_TRACK_CACHE_STORAGE_KEY]: Object.fromEntries(coverTrackEntries),
+            [BPM_CACHE_STORAGE_KEY]: Object.fromEntries(bpmCache),
+            [COVER_CACHE_STORAGE_KEY]: Object.fromEntries(coverCache),
+            [COVER_TRACK_CACHE_STORAGE_KEY]: Object.fromEntries(coverTrackCache),
         }).catch(e => console.warn('[Deezer BPM] Could not persist cache:', e));
     }
 
