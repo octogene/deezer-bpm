@@ -437,7 +437,8 @@
     // Returns true if BPM injection should proceed, false otherwise.
     function detectPageType() {
         return /\/(playlist|album)\/\d+/.test(location.pathname)
-            || /\/search\/[^/]+(\/track)?$/.test(location.pathname);
+            || /\/search\/[^/]+(\/track)?$/.test(location.pathname)
+            || /\/profile\/\d+\/(loved|history)/.test(location.pathname);;
     }
 
     // ── Deezer API – fetch ordered track IDs for current playlist/album ───────
