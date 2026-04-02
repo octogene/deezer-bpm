@@ -35,7 +35,7 @@
     const COVER_CACHE_STORAGE_KEY = 'deezerCoverIdCache';
     const CLEAR_CACHE_STORAGE_KEY = 'deezerBpmCacheClear';
     const COVER_TRACK_CACHE_STORAGE_KEY = 'deezerCoverTrackCache';
-    const MAX_CACHE_SIZE = 5000; // cap to avoid filling up extension storage
+    const MAX_CACHE_SIZE = 10000; // cap to avoid filling up extension storage
     const DEBUG = localStorage.getItem('deezerBpmDebug') === '1';
 
     // ── Debug logging ─────────────────────────────────────────────────────────
