@@ -11,6 +11,12 @@
     const STORAGE_KEY = 'deezerBpmPlaylistMode'; // localStorage key for playlist mode preference
     const COVER_PLACEHOLDER_ID = 'd41d8cd98f00b204e9800998ecf8427e' // hash of the cover image placeholder
     const UNRESOLVABLE = Symbol('unresolvable'); // returned by resolvers to permanently skip a row
+    const BPM_CACHE_STORAGE_KEY = 'deezerBpmCache';
+    const COVER_CACHE_STORAGE_KEY = 'deezerCoverIdCache';
+    const CLEAR_CACHE_STORAGE_KEY = 'deezerBpmCacheClear';
+    const COVER_TRACK_CACHE_STORAGE_KEY = 'deezerCoverTrackCache';
+    const MAX_CACHE_SIZE = 10000; // cap to avoid filling up extension storage
+    const DEBUG = localStorage.getItem('deezerBpmDebug') === '1';
 
     class LruMap extends Map {
         constructor(maxSize, entries) {
@@ -60,13 +66,6 @@
     const storageApi = (typeof browser !== 'undefined' && browser.storage)
         ? browser.storage
         : chrome.storage;
-
-    const BPM_CACHE_STORAGE_KEY = 'deezerBpmCache';
-    const COVER_CACHE_STORAGE_KEY = 'deezerCoverIdCache';
-    const CLEAR_CACHE_STORAGE_KEY = 'deezerBpmCacheClear';
-    const COVER_TRACK_CACHE_STORAGE_KEY = 'deezerCoverTrackCache';
-    const MAX_CACHE_SIZE = 10000; // cap to avoid filling up extension storage
-    const DEBUG = localStorage.getItem('deezerBpmDebug') === '1';
 
     // ── Debug logging ─────────────────────────────────────────────────────────
     // Set localStorage key 'deezerBpmDebug' to '1' in the browser console to
