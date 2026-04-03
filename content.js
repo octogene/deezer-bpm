@@ -126,15 +126,11 @@
     // only triggers one write instead of hundreds.
     let saveDebounce = null;
 
-    const runWhenIdle = window.requestIdleCallback
-        ? callback => window.requestIdleCallback(callback, {timeout: 2000})
-        : callback => setTimeout(callback, 0);
-
     function scheduleSaveCache() {
         if (saveDebounce !== null) return; // timer already pending, let it fire
         saveDebounce = setTimeout(() => {
             saveDebounce = null;
-            runWhenIdle(() => persistCaches());
+            persistCaches();
         }, 2000);
     }
 
@@ -145,14 +141,6 @@
             [COVER_CACHE_STORAGE_KEY]: Object.fromEntries(coverCache),
             [COVER_TRACK_CACHE_STORAGE_KEY]: Object.fromEntries(coverTrackCache),
         }).catch(e => console.warn('[Deezer BPM] Could not persist cache:', e));
-    }
-
-    function trimMapToMaxSize(map, maxSize) {
-        while (map.size > maxSize) {
-            const oldestKey = map.keys().next().value;
-            map.delete(oldestKey);
-        }
-        return map;
     }
 
     // ── Fetch queue (max 3 concurrent requests) ───────────────────────────────
@@ -339,7 +327,15 @@
         if (!albumMatch) return null;
         const albumId = albumMatch[1];
 
-        // ── Fast path: try to resolve via the cover image in the miniplayer ──
+        // ── Fast path 1: album key (no cover image needed) ────────────────────
+        const albumKey = makeAlbumTrackKey(albumId, rawTitle);
+        const cachedByAlbumKey = coverTrackCache.get(albumKey);
+        if (cachedByAlbumKey) {
+            logDebugInfo('[BADGE] Album-key cache hit:', albumKey);
+            return cachedByAlbumKey;
+        }
+
+        // ── Fast path 2: try to resolve via the cover image in the miniplayer ──
         // If the cover is already in coverCache and the track is in coverTrackCache
         // we can resolve without any network request.
         const coverId = extractCoverId(container, 'item_cover')
@@ -492,6 +488,10 @@
         return coverId + '\0' + normalizeTrackKeyPart(title);
     }
 
+    function makeAlbumTrackKey(albumId, title) {
+        return 'album:' + albumId + '\0' + normalizeTrackKeyPart(title);
+    }
+
     function extractRowElement(row) {
         const coverImg = row.querySelector('[data-testid="cover"] img');
         const titleEl = row.querySelector('[data-testid="title"]');
@@ -551,6 +551,29 @@
 
         const rawTitle = titleEl.textContent.trim();
 
+        // ── 0. Album-keyed fast path (no cover image needed) ─────────────────
+        // Extract albumId from DOM immediately — it's always present in the link href
+        // or in the page URL. This avoids depending on the lazy-loaded cover image.
+        // Should work everywhere except for the queue list
+        let albumId;
+        if (albumEl) {
+            const albumMatch = albumEl.getAttribute('href')?.match(/\/album\/(\d+)/);
+            albumId = albumMatch ? albumMatch[1] : null;
+        } else {
+            albumId = location.pathname.match(/\/album\/(\d+)/)?.[1] ?? null;
+        }
+
+        if (albumId) {
+            const albumKey = makeAlbumTrackKey(albumId, rawTitle);
+            const cachedTrackId = coverTrackCache.get(albumKey);
+            if (cachedTrackId) {
+                logDebugInfo('[ROW RES]', 'Album-key cache hit:', albumKey);
+                return cachedTrackId;
+            } else {
+                logDebugInfo('[ROW RES]', 'Album-key cache miss:', albumKey);
+            }
+        }
+
         // ── 1. Fast path ─────
         let key = null;
         if (coverId) {
@@ -566,7 +589,7 @@
             // ── 1b. Cover path: coverId → albumId → in-memory album → trackId ────
             const albumId = coverCache.get(coverId);
             if (albumId) {
-                logDebugInfo('[ROW RES]', 'Album cache hit:', albumId, rawTitle);
+                logDebugInfo('[ROW RES]', 'Album-cover cache hit:', albumId, rawTitle);
                 const albumData = albumCache.get(albumId);
                 if (albumData) {
                     const match = findTrackMatch(albumData.tracks, rawTitle);
@@ -580,22 +603,14 @@
                         logDebugInfo('[ROW RES]', 'Track not found in album data:', albumData);
                     }
                 } else {
-                    logDebugInfo('[ROW RES]', 'Album cache miss:', key);
+                    logDebugInfo('[ROW RES]', 'Album-cover cache miss:', key);
                 }
             }
+        } else {
+            logDebugInfo('[ROW RES]', 'No cover ID found');
         }
 
         // ── 2. Album path: resolve albumId from DOM or URL, fetch if needed ──
-        let albumId;
-        if (albumEl) {
-            // Album link is present in the row, use it to resolve the album ID.
-            const albumMatch = albumEl.getAttribute('href').match(/\/album\/(\d+)/);
-            albumId = albumMatch ? albumMatch[1] : null;
-        } else {
-            // We probably are on an album page, extract album ID from URL.
-            albumId = location.pathname.match(/\/album\/(\d+)/)?.[1] ?? null;
-        }
-
         if (albumId) {
             if (DEBUG) logDebugInfo('[ROW RES]', 'Album ID found:', albumId);
             if (coverId && !coverCache.has(coverId)) coverCache.set(coverId, albumId);
@@ -612,9 +627,15 @@
                 } else {
                     if (DEBUG) logDebugInfo('[ROW RES]', 'Track ID not found:', trackId);
                 }
+                // Set cache for queue list use case
                 if (trackId && albumData.coverId) {
                     coverTrackCache.set(makeCoverTrackKey(albumData.coverId, rawTitle), trackId);
                 }
+                // Set cache for all other cases
+                const albumKey = makeAlbumTrackKey(albumId, rawTitle);
+                coverTrackCache.set(albumKey, trackId);
+                logDebugInfo('[ROW RES]', 'Album-track cache set:', albumKey, trackId);
+                scheduleSaveCache();
                 if (!allowSearchFallback) return trackId;
             } catch (e) {
                 if (DEBUG) logDebugError('[ROW RES]', 'Album fetch failed', e);
@@ -1009,8 +1030,11 @@
     // Flush cache immediately when the page is hidden (tab switch, navigation, extension reload)
     // to avoid losing entries that are still pending in the debounce timer.
     window.addEventListener('pagehide', () => {
-        clearTimeout(saveDebounce);
-        persistCaches();
+        if (saveDebounce !== null) {
+            clearTimeout(saveDebounce);
+            saveDebounce = null;
+            persistCaches();
+        }
     });
 
     // Safety net: Deezer's virtualised list sometimes recycles existing row elements
