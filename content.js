@@ -17,6 +17,8 @@
     const COVER_TRACK_CACHE_STORAGE_KEY = 'deezerCoverTrackCache';
     const MAX_CACHE_SIZE = 10000; // cap to avoid filling up extension storage
     const DEBUG = localStorage.getItem('deezerBpmDebug') === '1';
+    const PLAYLIST_RESCAN_INTERVAL_MS = 2500;
+    const CACHE_SAVE_DEBOUNCE_MS = 2000;
 
     class LruMap extends Map {
         constructor(maxSize, entries) {
@@ -57,7 +59,7 @@
     const coverCache = new LruMap(MAX_CACHE_SIZE); // coverId (string) → albumId (string|null)
     const inFlight = new Map(); // inFlightId (string) → Promise
     const albumCache = new LruMap(MAX_CACHE_SIZE); // coverId (string) → albumData
-    const coverTrackCache = new LruMap(MAX_CACHE_SIZE); // coverId+trackTitle (string) → trackId (string|null)
+    const trackResolutionCache = new LruMap(MAX_CACHE_SIZE); // coverId+trackTitle (string) → trackId (string|null)
     // Tracks requests that are currently in-flight so
     // two callers asking for the same track share one fetch.
 
@@ -78,14 +80,14 @@
         };
 
     const logDebugError = DEBUG
-        ? console.log.bind(console, '%c[Deezer BPM]', 'color: white; background: red; border-radius: 3px; font-weight: bold')
+        ? console.error.bind(console, '%c[Deezer BPM]', 'color: white; background: red; border-radius: 3px; font-weight: bold')
         : () => {
         };
 
     async function checkCacheClear() {
         try {
             if (localStorage.getItem(CLEAR_CACHE_STORAGE_KEY) === '1') {
-                storageApi.local.remove([BPM_CACHE_STORAGE_KEY, COVER_CACHE_STORAGE_KEY, COVER_TRACK_CACHE_STORAGE_KEY]);
+                await storageApi.local.remove([BPM_CACHE_STORAGE_KEY, COVER_CACHE_STORAGE_KEY, COVER_TRACK_CACHE_STORAGE_KEY]);
                 logDebugInfo('Cache cleared');
                 localStorage.removeItem(CLEAR_CACHE_STORAGE_KEY);
             }
@@ -114,7 +116,7 @@
             }
             const savedCoverTrack = cache[COVER_TRACK_CACHE_STORAGE_KEY];
             if (savedCoverTrack && typeof savedCoverTrack === 'object') {
-                for (const [key, trackId] of Object.entries(savedCoverTrack)) coverTrackCache.set(key, trackId);
+                for (const [key, trackId] of Object.entries(savedCoverTrack)) trackResolutionCache.set(key, trackId);
             }
         } catch (e) {
             console.warn('[Deezer BPM] Could not load caches:', e);
@@ -131,7 +133,7 @@
         saveDebounce = setTimeout(() => {
             saveDebounce = null;
             persistCaches();
-        }, 2000);
+        }, CACHE_SAVE_DEBOUNCE_MS);
     }
 
     function persistCaches() {
@@ -139,7 +141,7 @@
         storageApi.local.set({
             [BPM_CACHE_STORAGE_KEY]: Object.fromEntries(bpmCache),
             [COVER_CACHE_STORAGE_KEY]: Object.fromEntries(coverCache),
-            [COVER_TRACK_CACHE_STORAGE_KEY]: Object.fromEntries(coverTrackCache),
+            [COVER_TRACK_CACHE_STORAGE_KEY]: Object.fromEntries(trackResolutionCache),
         }).catch(e => console.warn('[Deezer BPM] Could not persist cache:', e));
     }
 
@@ -253,6 +255,7 @@
                 logDebugInfo('Album cache size:', albumCache.size);
                 logDebugInfo('Set album cover cache entry for coverId:', data.md5_image, 'with albumId:', id);
                 coverCache.set(data.md5_image, id)
+                scheduleSaveCache();
                 return albumData;
             } finally {
                 // Always remove from inFlight when done, whether it succeeded or threw.
@@ -329,7 +332,7 @@
 
         // ── Fast path 1: album key (no cover image needed) ────────────────────
         const albumKey = makeAlbumTrackKey(albumId, rawTitle);
-        const cachedByAlbumKey = coverTrackCache.get(albumKey);
+        const cachedByAlbumKey = trackResolutionCache.get(albumKey);
         if (cachedByAlbumKey) {
             logDebugInfo('[BADGE] Album-key cache hit:', albumKey);
             return cachedByAlbumKey;
@@ -343,7 +346,7 @@
         if (coverId) {
             key = makeCoverTrackKey(coverId, rawTitle)
             logDebugInfo('[BADGE] Checking cover cache for:', key);
-            const cachedTrackId = coverTrackCache.get(key)
+            const cachedTrackId = trackResolutionCache.get(key)
             if (cachedTrackId) {
                 logDebugInfo('[BADGE] Cover cache hit:', cachedTrackId);
                 return cachedTrackId;
@@ -363,7 +366,7 @@
             const trackId = match ? String(match.id) : null;
             if (trackId) {
                 logDebugInfo('[BADGE] Album track match:', match);
-                if (key) coverTrackCache.set(key, trackId);
+                if (key) trackResolutionCache.set(key, trackId);
             }
             return trackId
         } catch (e) {
@@ -378,7 +381,8 @@
     async function updatePlayerBadge() {
         const callId = ++badgeUpdateId;
         setBadgeValue('…');
-        const trackId = await detectTrackIdFromPlayer().catch(() => null);
+        const trackId = await detectTrackIdFromPlayer().catch(reason => logDebugError(
+            '[BADGE] Failed to detect track ID from player:', reason));
         if (callId !== badgeUpdateId) return; // a newer call has started — discard this result
         if (!trackId) {
             setBadgeValue('–');
@@ -415,6 +419,7 @@
     // Handles the case where the page URL changed since the last call (navigated
     // to a different playlist/album) by fetching a fresh track list first.
     async function injectPlaylistBpms() {
+        if (isLoadingTrackIds) return;
         if (currentPageUrl !== location.pathname) {
             // The user navigated to a new page. Clean up any tags from the previous page
             // before loading the new track list.
@@ -464,7 +469,8 @@
     function detectPageType() {
         return /\/(playlist|album)\/\d+/.test(location.pathname)
             || /\/search\/[^/]+(\/track)?$/.test(location.pathname)
-            || /\/profile\/\d+\/(loved|history)/.test(location.pathname);;
+            || /\/profile\/\d+\/(loved|history)/.test(location.pathname);
+        ;
     }
 
     // ── Deezer API – fetch ordered track IDs for current playlist/album ───────
@@ -565,7 +571,7 @@
 
         if (albumId) {
             const albumKey = makeAlbumTrackKey(albumId, rawTitle);
-            const cachedTrackId = coverTrackCache.get(albumKey);
+            const cachedTrackId = trackResolutionCache.get(albumKey);
             if (cachedTrackId) {
                 logDebugInfo('[ROW RES]', 'Album-key cache hit:', albumKey);
                 return cachedTrackId;
@@ -579,7 +585,7 @@
         if (coverId) {
             // ── 1a. Fastest path: coverId + title → trackId (single lookup) ──────
             key = makeCoverTrackKey(coverId, rawTitle)
-            const cached = coverTrackCache.get(key);
+            const cached = trackResolutionCache.get(key);
             if (cached) {
                 logDebugInfo('[ROW RES]', 'Cover cache hit:', key);
                 return cached;
@@ -596,7 +602,7 @@
                     const trackId = match ? String(match.id) : null;
                     if (trackId) {
                         logDebugInfo('[ROW RES]', 'Track cache hit:', key);
-                        coverTrackCache.set(key, trackId);
+                        if (key) trackResolutionCache.set(key, trackId);
                         scheduleSaveCache();
                         return trackId;
                     } else {
@@ -612,37 +618,37 @@
 
         // ── 2. Album path: resolve albumId from DOM or URL, fetch if needed ──
         if (albumId) {
-            if (DEBUG) logDebugInfo('[ROW RES]', 'Album ID found:', albumId);
+            logDebugInfo('[ROW RES]', 'Album ID found:', albumId);
             if (coverId && !coverCache.has(coverId)) coverCache.set(coverId, albumId);
 
             try {
-                if (DEBUG) logDebugInfo('[ROW RES]', 'Fetching album data for ID:', albumId);
+                logDebugInfo('[ROW RES]', 'Fetching album data for ID:', albumId);
                 const albumData = await fetchAlbumCached(albumId);
                 const match = (albumData.tracks || []).find(
                     t => normalizeTrackKeyPart(t.title) === normalizeTrackKeyPart(rawTitle)
                 );
                 const trackId = match ? String(match.id) : null;
                 if (trackId) {
-                    if (DEBUG) logDebugInfo('[ROW RES]', 'Track ID found:', trackId);
+                    logDebugInfo('[ROW RES]', 'Track ID found:', trackId);
                 } else {
-                    if (DEBUG) logDebugInfo('[ROW RES]', 'Track ID not found:', trackId);
+                    logDebugInfo('[ROW RES]', 'Track ID not found:', trackId);
                 }
                 // Set cache for queue list use case
                 if (trackId && albumData.coverId) {
-                    coverTrackCache.set(makeCoverTrackKey(albumData.coverId, rawTitle), trackId);
+                    trackResolutionCache.set(makeCoverTrackKey(albumData.coverId, rawTitle), trackId);
                 }
                 // Set cache for all other cases
                 const albumKey = makeAlbumTrackKey(albumId, rawTitle);
-                coverTrackCache.set(albumKey, trackId);
+                trackResolutionCache.set(albumKey, trackId);
                 logDebugInfo('[ROW RES]', 'Album-track cache set:', albumKey, trackId);
                 scheduleSaveCache();
                 if (!allowSearchFallback) return trackId;
             } catch (e) {
-                if (DEBUG) logDebugError('[ROW RES]', 'Album fetch failed', e);
+                logDebugError('[ROW RES]', 'Album fetch failed', e);
                 if (!allowSearchFallback) return UNRESOLVABLE;
             }
         } else {
-            if (DEBUG) logDebugInfo('[ROW RES]', 'No album ID found');
+            logDebugInfo('[ROW RES]', 'No album ID found');
         }
 
         // ── 3. Search fallback (queue rows without album link) ────────────
@@ -656,25 +662,25 @@
 
         const searchPromise = albumQueue.add(async () => {
             try {
-                if (DEBUG) logDebugInfo('[ROW RES]', 'Search fallback for', query);
+                logDebugInfo('[ROW RES]', 'Search fallback for', query);
                 const resp = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(query)}&limit=5`);
                 if (!resp.ok) return UNRESOLVABLE;
                 const data = await resp.json();
-                if (DEBUG) logDebugInfo('[ROW RES]', 'Search response:', data);
+                logDebugInfo('[ROW RES]', 'Search response:', data);
                 const results = data.data || [];
                 // Try to find a result whose cover image matches the row's cover.
                 const match = results.find(r => r.md5_image === coverId) ?? results[0];
-                const trackId = match?.id !== null ? String(match.id) : UNRESOLVABLE;
+                const trackId = match?.id != null ? String(match.id) : UNRESOLVABLE;
                 // Exact match found, cache it.
                 if (trackId !== UNRESOLVABLE) {
-                    if (DEBUG) logDebugInfo('[ROW RES]', 'Search hit:', trackId, '. Caching it...');
-                    coverTrackCache.set(key, trackId);
+                    logDebugInfo('[ROW RES]', 'Search hit:', trackId, '. Caching it...');
+                    trackResolutionCache.set(key, trackId);
                 } else {
-                    if (DEBUG) logDebugError('[ROW RES]', 'Search miss ', trackId, 'for ', query, 'and cover', coverId, '. Not caching it.');
+                    logDebugError('[ROW RES]', 'Search miss for ', query, 'and cover', coverId, '. Not caching it.');
                 }
                 return trackId;
             } catch {
-                if (DEBUG) logDebugError('Search failed for', query);
+                logDebugError('Search failed for', query);
                 return UNRESOLVABLE;
             } finally {
                 inFlight.delete(query);
@@ -700,7 +706,7 @@
 
         // Walk up to the column-level ancestor (first parent with 3+ siblings).
         while (el.parentElement && el.parentElement !== row) {
-            if (el.parentElement.children.length >= 3) return el;
+            if (el.parentElement.children.length >= 2) return el;
             el = el.parentElement;
         }
         return null;
@@ -727,7 +733,7 @@
 
                 const existing = row.querySelector(`.${INLINE_CLASS}`);
                 if (existing) {
-                    const newTrackId = coverTrackCache.get(currentKey);
+                    const newTrackId = trackResolutionCache.get(currentKey);
                     if (newTrackId) {
                         const bpm = bpmCache.get(newTrackId);
                         if (bpm !== undefined) {
@@ -789,12 +795,12 @@
                 }
 
                 // Reuse the eager span if present, otherwise create one now.
-                const bpmSpan = span ?? createBpmSpan(row, {rowKey : pendingRowKey});
+                const bpmSpan = span ?? createBpmSpan(row, {rowKey: pendingRowKey});
                 if (span) span.dataset.dbpmRowKey = pendingRowKey;
                 bpmSpan.dataset.dbpmTrack = trackId;
 
                 fetchBpmCached(trackId).then(renderBpmValue(bpmSpan, trackId)).catch(err => {
-                    if (DEBUG) console.warn('[Deezer BPM] fetch error for track', trackId, err);
+                    console.warn('[Deezer BPM] fetch error for track', trackId, err);
                     if (bpmSpan.isConnected) bpmSpan.textContent = 'N/A';
                 });
             });
@@ -809,10 +815,13 @@
         // Guard: don't inject stale data if the page has already changed.
         if (!isTrackPage || currentPageUrl !== location.pathname) return;
 
-        // Inject the BPM column header if not already present.
-        injectColumnHeader();
+        const catalog = document.querySelector('.catalog-content');
+        if (!catalog) return;
 
-        injectBpmsIntoRows(document, row => resolveRowTrackId(row), {
+        // Inject the BPM column header if not already present.
+        injectColumnHeader(catalog);
+
+        injectBpmsIntoRows(catalog, row => resolveRowTrackId(row), {
             eagerSpan: true,
             rowFilter: row =>
                 !row.closest('.player-queuelist') &&
@@ -828,8 +837,11 @@
     // Remove all BPM tags we injected and clear the "already processed" markers
     // so they will be re-injected if playlist mode is turned back on.
     function removePlaylistBpms() {
-        document.querySelectorAll(`.${INLINE_CLASS}, .${HEADER_CLASS}`).forEach(el => el.remove());
-        document.querySelectorAll(`[${INJECTED_ATTR}]`).forEach(el => {
+        const catalog = document.querySelector('.catalog-content');
+        if (!catalog) return;
+
+        catalog.querySelectorAll(`.${INLINE_CLASS}, .${HEADER_CLASS}`).forEach(el => el.remove());
+        catalog.querySelectorAll(`[${INJECTED_ATTR}]`).forEach(el => {
             el.removeAttribute(INJECTED_ATTR);
             el.removeAttribute(ROW_KEY_ATTR);
         });
@@ -837,20 +849,20 @@
 
     // Inject a "BPM" columnheader into the playlist header row, positioned just
     // before the duration header. Idempotent — does nothing if already injected.
-    function injectColumnHeader() {
+    function injectColumnHeader(container) {
         // Already injected — nothing to do.
-        if (document.querySelector(`.${HEADER_CLASS}`)) return;
+        if (container.querySelector(`.${HEADER_CLASS}`)) return;
 
         // Find the duration columnheader: the one whose text matches a time pattern
         // (e.g. "DURÉE", "DURATION") or that contains a clock/duration icon.
         // As a fallback we match the last columnheader in the row.
-        const headers = [...document.querySelectorAll('[role="columnheader"]')];
+        const headers = [...container.querySelectorAll('[role="columnheader"]')];
         if (!headers.length) return;
 
         // Use findDurationCell on a live data row to detect which column index
         // holds the duration, then insert the BPM header before that column header.
         let durationHeader = null;
-        const durationCell = [...document.querySelectorAll('[role="row"][aria-rowindex]')]
+        const durationCell = [...container.querySelectorAll('[role="row"][aria-rowindex]')]
             .reduce((found, row) => found ?? findDurationCell(row), null);
         if (durationCell) {
             const colIndex = [...durationCell.parentElement.children].indexOf(durationCell);
@@ -1050,7 +1062,7 @@
         } else if (isTrackPage) {
             injectPlaceholders(); // re-check rows in case they were sorted in-place
         }
-    }, 2500);
+    }, PLAYLIST_RESCAN_INTERVAL_MS);
 
     // ── Toggle – capture-phase listener so Deezer can't intercept it ─────────
     // Deezer's UI framework (Chakra UI) stops click events from bubbling in some
