@@ -670,7 +670,7 @@
                 const results = data.data || [];
                 // Try to find a result whose cover image matches the row's cover.
                 const match = results.find(r => r.md5_image === coverId) ?? results[0];
-                const trackId = match?.id != null ? String(match.id) : UNRESOLVABLE;
+                const trackId = (match?.id !== null && match?.id !== undefined) ? String(match.id) : UNRESOLVABLE;
                 // Exact match found, cache it.
                 if (trackId !== UNRESOLVABLE) {
                     logDebugInfo('[ROW RES]', 'Search hit:', trackId, '. Caching it...');
