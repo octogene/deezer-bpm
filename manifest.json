@@ -26,7 +26,17 @@
   "content_scripts": [
     {
       "matches": ["https://www.deezer.com/*"],
-      "js": ["content.js"],
+      "js": [
+        "content/constants.js",
+        "content/utils.js",
+        "content/cache.js",
+        "content/api.js",
+        "content/resolver.js",
+        "content/badge.js",
+        "content/playlist.js",
+        "content/observers.js",
+        "content/main.js"
+      ],
       "css": ["styles.css"],
       "run_at": "document_idle"
     }
