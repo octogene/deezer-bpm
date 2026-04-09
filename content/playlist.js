@@ -15,6 +15,7 @@
         makeCoverTrackKey,
         logDebugInfo,
         logDebugError,
+        extractCoverId,
     } = window.DeezerBpm.utils;
 
     const {
@@ -45,10 +46,8 @@
 
     function getRowKey(row) {
         const titleEl = row.querySelector('[data-testid="title"]');
-        const coverImg = row.querySelector('[data-testid="cover"] img');
         const title = titleEl?.textContent.trim() ?? '';
-        const coverMatch = coverImg?.getAttribute('src')?.match(/\/images\/cover\/([a-f0-9]+)\//);
-        const coverId = coverMatch?.[1] ?? '';
+        const coverId = extractCoverId(row);
         return makeCoverTrackKey(coverId, title);
     }
 

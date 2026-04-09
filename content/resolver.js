@@ -4,7 +4,6 @@
     window.DeezerBpm = window.DeezerBpm || {};
 
     const {
-        COVER_PLACEHOLDER_ID,
         UNRESOLVABLE,
     } = window.DeezerBpm.constants;
 
@@ -32,12 +31,10 @@
     } = window.DeezerBpm.api;
 
     function extractRowElement(row) {
-        const coverImg = row.querySelector('[data-testid="cover"] img');
         const titleEl = row.querySelector('[data-testid="title"]');
         const artistEl = row.querySelector('[data-testid="artist"]');
         const albumEl = row.querySelector('[data-testid="album"]');
-        const coverMatch = coverImg?.getAttribute('src')?.match(/\/images\/cover\/([a-f0-9]+)\//);
-        const coverId = coverMatch ? coverMatch[1] : null;
+        const coverId = extractCoverId(row) ?? null;
 
         return {
             titleEl,
@@ -57,7 +54,7 @@
             if (!row.isConnected) break;
 
             const retried = extractRowElement(row);
-            if (retried.coverId !== null && retried.coverId !== COVER_PLACEHOLDER_ID) {
+            if (retried.coverId) {
                 return retried;
             }
         }
@@ -126,6 +123,11 @@
     }
 
     async function resolveRowTrackId(row, { allowSearchFallback = false } = {}) {
+        if (row.getAttribute('aria-disabled') === 'true') {
+            logDebugInfo('[ROW RES]', 'Skipping disabled row');
+            return UNRESOLVABLE;
+        }
+
         const { titleEl, artistEl, albumEl, coverId } = await extractRowElementAsync(row);
         if (!titleEl) return null;
 

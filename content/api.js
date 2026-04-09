@@ -4,6 +4,7 @@
     window.DeezerBpm = window.DeezerBpm || {};
 
     const {
+        COVER_PLACEHOLDER_ID,
         TRACK_QUEUE_CONCURRENCY,
         ALBUM_QUEUE_CONCURRENCY,
         UNRESOLVABLE,
@@ -141,6 +142,9 @@
                     })),
                 };
 
+                if (data.md5_image === COVER_PLACEHOLDER_ID) {
+                    logDebugInfo('ALBUM MISSING COVER, USING FIRST TRACK COVER');
+                }
                 logDebugInfo('Fetched album from API:', albumData);
 
                 albumCache.set(id, albumData);
@@ -189,7 +193,7 @@
 
                 const results = data.data || [];
                 const match = results.find(result => result.md5_image === coverId) ?? results[0];
-                const trackId = match?.id !== null && match?.id !== undefined
+                const trackId = (match?.id !== null && match?.id !== undefined)
                     ? String(match.id)
                     : UNRESOLVABLE;
 
