@@ -6,7 +6,9 @@ A browser extension for Firefox and Chrome that displays the BPM of songs on [De
 
 - **Floating badge** — shows the BPM of the currently playing track in a fixed badge at the bottom-right of the page
 - **Playlist mode** — shows the BPM next to each track in a playlist or album view, loaded lazily as you scroll
-- **Persistent preference** — playlist mode on/off is remembered across sessions
+- **BPM Selection & Filtering** — select and filter tracks by BPM range using expressions like `>120` or `124`
+- **Persistent preference** — playlist mode and other settings are remembered across sessions
+- **Localized** — UI available in English and French
 
 ## Screenshots
 
@@ -48,6 +50,9 @@ A browser extension for Firefox and Chrome that displays the BPM of songs on [De
 3. To show BPM for every track in a playlist or album, click the **≡** button on the badge
    - The button turns **bold green** when playlist mode is active
    - BPM values appear next to the track duration column and load as you scroll
+4. To filter or select tracks by BPM, click the **filter icon** on the badge
+   - Enter an expression: `>120` (greater than 120), `<=90` (less or equal to 90), `120-130` (range), or `124` (exact match)
+   - Matching tracks are highlighted and automatically checked in the playlist
 
 ## How it works
 
@@ -57,18 +62,31 @@ For playlist mode, the extension fetches the full track list from the API (`/pla
 
 ## Development
 
-The extension is a plain WebExtension (Manifest V3) with no build step or dependencies.
+The extension is a plain WebExtension (Manifest V3) with no build step.
 
 ```
 deezer-bpm/
 ├── manifest.json
-├── content.js      # content script — badge + playlist injection
+├── content/        # content script modules
 ├── styles.css      # badge and inline BPM tag styles
-└── icons/
-    └── icon48.svg
+├── _locales/       # internationalization support
+└── icons/          # extension icons
 ```
 
 To work on it locally, load it as a temporary add-on (see [From source](#from-source) above). After editing a file, click **Reload** in `about:debugging`.
+
+### Linting
+
+We use ESLint to maintain code quality. To run the linter:
+
+```bash
+npm install
+npm run lint:js
+```
+
+## Documentation
+
+For more details on how the extension works and a full FAQ, visit the official documentation at [octogene.github.io/deezer-bpm](https://octogene.github.io/deezer-bpm/).
 
 ## Publishing a release
 
