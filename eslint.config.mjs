@@ -2,7 +2,17 @@ import globals from 'globals';
 
 export default [
     {
-        files: ['content.js'],
+        files: [
+            "content/constants.js",
+            "content/utils.js",
+            "content/cache.js",
+            "content/api.js",
+            "content/resolver.js",
+            "content/badge.js",
+            "content/playlist.js",
+            "content/observers.js",
+            "content/main.js"
+        ],
         languageOptions: {
             ecmaVersion: 2022,
             sourceType: 'script', // content.js is an IIFE, not a module
