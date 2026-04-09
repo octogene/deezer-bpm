@@ -385,6 +385,11 @@
       <p>Toggle playlist mode with the ≡ button to show the BPM next to every track in a playlist or album view.</p>
     </div>
     <div class="feature">
+      <div class="feature-icon">🔍</div>
+      <h3>BPM selection <span style="display:inline-block;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#b45a00;background:rgba(255,160,0,.15);border:1px solid rgba(255,160,0,.35);border-radius:4px;padding:1px 6px;vertical-align:middle;line-height:1.6">Experimental</span></h3>
+      <p>Filter and select tracks by BPM using expressions like <code style="background:rgba(162,56,255,.15);color:var(--purple-lt);padding:1px 5px;border-radius:4px;font-size:.85em">&gt;120</code> or <code style="background:rgba(162,56,255,.15);color:var(--purple-lt);padding:1px 5px;border-radius:4px;font-size:.85em">&lt;=90</code> — matched tracks are checked automatically as you scroll.</p>
+    </div>
+    <div class="feature">
       <div class="feature-icon">⚡</div>
       <h3>Instant &amp; cached</h3>
       <p>BPM values are cached across sessions so tracks you've seen before load instantly, with no repeated API calls.</p>
@@ -462,6 +467,43 @@
           DOM management, which is fragile and likely to break with any Deezer update. A future
           version may offer an export of BPM data or a sorted overlay view, but true in-place
           sorting is not planned for now.
+        </p>
+      </div>
+    </div>
+
+    <div class="faq-item">
+      <button class="faq-question" aria-expanded="false">
+        How does BPM selection and filtering work?
+        <span class="faq-chevron">▼</span>
+      </button>
+      <div class="faq-answer" role="region">
+        <span class="faq-label">In short</span>
+        <p>
+          You can use the filter icon in the BPM badge to highlight and automatically select
+          tracks that match a specific BPM range. The filter is active only as long as the
+          input is expanded (open); closing the filter input deactivates the filtering
+          logic and clears current highlights.
+        </p>
+        <span class="faq-label" style="margin-top: 16px; display: inline-block;">For the curious</span>
+        <p>
+          The filter supports several expressions: <code>&gt;120</code> (greater than 120),
+          <code>&lt;=90</code> (less than or equal to 90), <code>120-130</code> (between 120 and 130),
+          or a simple <code>124</code> (exact match). When a filter is active, rows that match
+          the criteria are highlighted with a subtle background color.
+        </p>
+        <p>
+          If you are in a playlist or album view, the extension will also automatically click
+          the selection checkbox for every matching track as it comes into view while you scroll.
+          This makes it easy to then perform bulk actions, like "Add to playlist" or "Add to queue",
+          using Deezer's own tools. Closing the filter input (by clicking the filter icon again)
+          will clear the highlights and deactivate the filter, but will keep already-selected 
+          tracks checked so you don't lose your work.
+        </p>
+        <p>
+          <strong>Note:</strong> Due to the way the extension interacts with Deezer's programmatic 
+          checkbox selection, you may experience minor "scroll glitches" or UI jumps while 
+          scrolling through large playlists with an active filter. This is a side-effect of 
+          ensuring tracks are correctly registered by Deezer's selection system.
         </p>
       </div>
     </div>

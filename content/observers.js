@@ -13,6 +13,7 @@
 
     const {
         getTrackListContainer,
+        applyFilterToVisibleRows,
     } = window.DeezerBpm.playlist;
 
     let playlistObserver = null;
@@ -57,6 +58,8 @@
                 if (onPlaylistMutation) {
                     onPlaylistMutation();
                 }
+
+                applyFilterToVisibleRows();
             });
         }
 

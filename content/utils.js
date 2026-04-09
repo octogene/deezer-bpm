@@ -53,6 +53,43 @@
         return new Promise(resolve => setTimeout(resolve, ms));
     }
 
+    function parseBpmFilter(str) {
+        if (!str || !str.trim()) return null;
+
+        const input = str.trim();
+
+        // 1. Range: "90-110"
+        const rangeMatch = input.match(/^(\d+)-(\d+)$/);
+        if (rangeMatch) {
+            const min = parseInt(rangeMatch[1], 10);
+            const max = parseInt(rangeMatch[2], 10);
+            return bpm => bpm >= min && bpm <= max;
+        }
+
+        // 2. Inequality: ">100", "<120", ">=90", "<=130", "==120"
+        const opMatch = input.match(/^(>|<|>=|<=|==)\s*(\d+)$/);
+        if (opMatch) {
+            const op = opMatch[1];
+            const val = parseInt(opMatch[2], 10);
+            switch (op) {
+                case '>':  return bpm => bpm > val;
+                case '<':  return bpm => bpm < val;
+                case '>=': return bpm => bpm >= val;
+                case '<=': return bpm => bpm <= val;
+                case '==': return bpm => bpm === val;
+            }
+        }
+
+        // 3. Simple number: "120"
+        const numMatch = input.match(/^(\d+)$/);
+        if (numMatch) {
+            const val = parseInt(numMatch[1], 10);
+            return bpm => bpm === val;
+        }
+
+        return null;
+    }
+
     window.DeezerBpm.utils = {
         normalizeTrackKeyPart,
         makeCoverTrackKey,
@@ -61,6 +98,7 @@
         logDebugInfo,
         logDebugError,
         delay,
+        parseBpmFilter,
         DEBUG,
     };
 })();

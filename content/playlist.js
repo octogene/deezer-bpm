@@ -8,6 +8,7 @@
         HEADER_CLASS,
         INJECTED_ATTR,
         ROW_KEY_ATTR,
+        FILTER_MATCH_CLASS,
         UNRESOLVABLE,
     } = window.DeezerBpm.constants;
 
@@ -16,7 +17,12 @@
         logDebugInfo,
         logDebugError,
         extractCoverId,
+        parseBpmFilter,
     } = window.DeezerBpm.utils;
+
+    const {
+        syncFilterButton,
+    } = window.DeezerBpm.badge;
 
     const {
         bpmCache,
@@ -26,6 +32,8 @@
     const {
         fetchBpmCached,
     } = window.DeezerBpm.api;
+
+    let activeBpmFilterPredicate = null;
 
     function findDurationCell(row) {
         let element = row.querySelector('[data-testid="duration"]');
@@ -51,12 +59,24 @@
         return makeCoverTrackKey(coverId, title);
     }
 
-    function renderBpmValue(span, trackId) {
+    function renderBpmValue(span, trackId, row = null) {
         return bpm => {
             if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
             span.textContent = bpm !== null ? String(bpm) : 'N/A';
             span.classList.toggle(`${INLINE_CLASS}--loaded`, bpm !== null);
             span.classList.toggle(`${INLINE_CLASS}--unknown`, bpm === null);
+
+            if (row && activeBpmFilterPredicate && bpm !== null) {
+                const bpmNum = Number(bpm);
+                const matches = !isNaN(bpmNum) && activeBpmFilterPredicate(bpmNum);
+                row.classList.toggle(FILTER_MATCH_CLASS, matches);
+                toggleRowCheckbox(row, matches);
+            } else if (row) {
+                row.classList.remove(FILTER_MATCH_CLASS);
+                // We don't necessarily unselect if the filter is cleared?
+                // Actually the user probably wants them unselected if they no longer match.
+                // But if the filter is cleared (null), we probably shouldn't touch checkboxes.
+            }
         };
     }
 
@@ -100,7 +120,7 @@
                             existing.dataset.dbpmRowKey = currentKey;
                             existing.dataset.dbpmTrack = newTrackId;
                             row.setAttribute(ROW_KEY_ATTR, currentKey);
-                            renderBpmValue(existing, newTrackId)(bpm);
+                            renderBpmValue(existing, newTrackId, row)(bpm);
                             continue;
                         }
                     }
@@ -146,6 +166,7 @@
                         span.dataset.dbpmRowKey = pendingRowKey;
                         span.textContent = '✕';
                     }
+                    row.classList.remove(FILTER_MATCH_CLASS);
                     return;
                 }
 
@@ -154,10 +175,13 @@
                 bpmSpan.dataset.dbpmTrack = trackId;
 
                 fetchBpmCached(trackId)
-                    .then(renderBpmValue(bpmSpan, trackId))
+                    .then(renderBpmValue(bpmSpan, trackId, row))
                     .catch(error => {
                         console.warn('[Deezer BPM] fetch error for track', trackId, error);
-                        if (bpmSpan.isConnected) bpmSpan.textContent = 'N/A';
+                        if (bpmSpan.isConnected) {
+                            bpmSpan.textContent = 'N/A';
+                            row.classList.remove(FILTER_MATCH_CLASS);
+                        }
                     });
             });
         }
@@ -237,6 +261,85 @@
         catalog.querySelectorAll(`[${INJECTED_ATTR}]`).forEach(element => {
             element.removeAttribute(INJECTED_ATTR);
             element.removeAttribute(ROW_KEY_ATTR);
+            element.classList.remove(FILTER_MATCH_CLASS);
+        });
+    }
+
+    function applyFilterToVisibleRows() {
+        const catalog = getTrackListContainer();
+        const rows = catalog ? [...catalog.querySelectorAll('[role="row"][aria-rowindex]')] : [];
+        const queueRows = [...document.querySelectorAll('.player-queuelist [role="row"][aria-rowindex]')];
+        const allRows = [...rows, ...queueRows];
+
+        allRows.forEach(row => {
+            const span = row.querySelector(`.${INLINE_CLASS}`);
+            if (!span) {
+                row.classList.remove(FILTER_MATCH_CLASS);
+                return;
+            }
+
+            const trackId = span.dataset.dbpmTrack;
+            if (!trackId || trackId === 'unresolvable') {
+                row.classList.remove(FILTER_MATCH_CLASS);
+                return;
+            }
+
+            const bpm = bpmCache.get(trackId);
+            if (activeBpmFilterPredicate && bpm !== undefined && bpm !== null) {
+                const bpmNum = Number(bpm);
+                const matches = !isNaN(bpmNum) && activeBpmFilterPredicate(bpmNum);
+                row.classList.toggle(FILTER_MATCH_CLASS, matches);
+                toggleRowCheckbox(row, matches);
+            } else {
+                row.classList.remove(FILTER_MATCH_CLASS);
+            }
+        });
+    }
+
+    function toggleRowCheckbox(row, shouldSelect) {
+        const button = row.querySelector('[data-testid="select_button"]');
+        const checkbox = button?.querySelector('input[type="checkbox"]');
+        if (!button || !checkbox) return;
+
+        // In Deezer's UI, the [aria-checked] attribute is usually on the button or a wrapper
+        const isChecked = button.getAttribute('aria-checked') === 'true' ||
+                          checkbox.closest('[aria-checked="true"]') !== null ||
+                          checkbox.checked;
+
+        if (shouldSelect !== isChecked) {
+            // Snapshot scrolls to avoid jumps (Chakra UI / Deezer sometimes scrolls on focus/click)
+            const snapshots = [];
+            let el = button.parentElement;
+            while (el) {
+                if (el.scrollTop !== 0 || el.scrollLeft !== 0) {
+                    snapshots.push({ el, top: el.scrollTop, left: el.scrollLeft });
+                }
+                el = el.parentElement;
+            }
+
+            const restore = () => {
+                for (const s of snapshots) {
+                    s.el.scrollTop = s.top;
+                    s.el.scrollLeft = s.left;
+                }
+            };
+
+            button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+
+            // Attempt to restore scroll positions immediately and slightly after
+            restore();
+            Promise.resolve().then(restore);
+            setTimeout(restore, 0);
+        }
+    }
+
+    function initPlaylistFilter() {
+        window.addEventListener('dbpm:filter-changed', (e) => {
+            const filterStr = e.detail.filter;
+            logDebugInfo('[PLAYLIST] Filter changed event received:', filterStr);
+            activeBpmFilterPredicate = parseBpmFilter(filterStr);
+            syncFilterButton(!!activeBpmFilterPredicate);
+            applyFilterToVisibleRows();
         });
     }
 
@@ -251,5 +354,7 @@
         injectPlaceholders,
         injectQueueBpms,
         removePlaylistBpms,
+        applyFilterToVisibleRows,
+        initPlaylistFilter,
     };
 })();
