@@ -10,6 +10,13 @@
         HEADER_CLASS: 'dbpm-header',
         INJECTED_ATTR: 'data-dbpm-injected',
         ROW_KEY_ATTR: 'data-dbpm-key',
+        FILTER_MATCH_CLASS: 'dbpm-filter-match',
+        FILTER_WIDGET_CLASS: 'dbpm-filter-widget',
+        FILTER_WIDGET_OPEN_CLASS: 'dbpm-filter-widget--open',
+        FILTER_BTN_CLASS: 'dbpm-filter-btn',
+        FILTER_BTN_ON_CLASS: 'dbpm-filter-btn--on',
+        FILTER_INPUT_CLASS: 'dbpm-filter-input',
+        FILTER_APPLY_CLASS: 'dbpm-filter-apply',
 
         // Local storage keys
         STORAGE_KEY: 'deezerBpmPlaylistMode',
@@ -36,6 +43,7 @@
         URL_CHANGE_DELAY_MS: 150,
         MINIPLAYER_UPDATE_DELAY_MS: 150,
         INITIAL_PLAYLIST_INIT_DELAY_MS: 900,
+        FILTER_DEBOUNCE_DELAY_MS: 200,
         ROW_COVER_WAIT_MS: 150,
         ROW_COVER_POLL_INTERVAL_MS: 16,
         PAGE_RETRY_DELAY_MS: 100,

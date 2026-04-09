@@ -8,6 +8,18 @@
   pointer-events: auto !important;
 
   display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  cursor: default;
+  user-select: none;
+}
+
+/* ── The circular disc ── */
+#deezer-bpm-badge .dbpm-disc {
+  display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -20,13 +32,10 @@
   border: 2px solid var(--tempo-colors-border-neutral-primary-default, #333);
   box-shadow: 0 2px 10px rgba(0,0,0,.55);
 
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  cursor: default;
-  user-select: none;
   transition: border-color .25s, background .25s;
 }
 
-#deezer-bpm-badge.dbpm-active {
+#deezer-bpm-badge .dbpm-disc--active {
   border-color: var(--tempo-colors-background-accent-primary-default, #a238ff);
   background: color-mix(in srgb, var(--tempo-colors-background-accent-primary-default, #a238ff) 15%, var(--tempo-colors-background-neutral-primary-default, #0f0f1a));
 }
@@ -48,7 +57,7 @@
   line-height: 1;
 }
 
-#deezer-bpm-badge.dbpm-active .dbpm-value {
+#deezer-bpm-badge .dbpm-disc--active .dbpm-value {
   color: color-mix(in srgb, var(--tempo-colors-background-accent-primary-default, #a238ff) 60%, white);
 }
 
@@ -85,7 +94,115 @@
   font-weight: 900 !important;
 }
 
+/* Filter widget inside badge */
+#deezer-bpm-badge .dbpm-filter-widget {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 32px;
+  /* Collapsed: just wide enough for the icon button */
+  width: 28px;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--tempo-colors-background-neutral-secondary-default, #1a1a2e);
+  border: 1px solid var(--tempo-colors-border-neutral-primary-default, #333);
+  box-shadow: 0 2px 8px rgba(0,0,0,.45);
+  transition: width .25s ease, border-color .25s;
+}
+
+#deezer-bpm-badge .dbpm-filter-widget--open {
+  width: 160px;
+  border-color: var(--tempo-colors-background-accent-primary-default, #a238ff);
+}
+
+/* Icon button — always visible, anchors the left edge */
+#deezer-bpm-badge .dbpm-filter-btn {
+  pointer-events: auto !important;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--tempo-colors-text-neutral-tertiary-default, #666);
+  cursor: pointer;
+  transition: color .2s;
+}
+
+#deezer-bpm-badge .dbpm-filter-btn svg {
+  fill: currentColor;
+}
+
+#deezer-bpm-badge .dbpm-filter-btn:hover,
+#deezer-bpm-badge .dbpm-filter-widget--open .dbpm-filter-btn {
+  color: var(--tempo-colors-background-accent-primary-default, #a238ff);
+}
+
+#deezer-bpm-badge .dbpm-filter-btn--on {
+  color: #a238ff !important;
+}
+
+/* Text input — hidden when collapsed, visible when open */
+#deezer-bpm-badge .dbpm-filter-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: var(--tempo-colors-text-neutral-primary-default, #f0f0f0);
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  outline: none;
+  opacity: 0;
+  transition: opacity .15s .1s;
+}
+
+#deezer-bpm-badge .dbpm-filter-widget--open .dbpm-filter-input {
+  opacity: 1;
+}
+
+/* Confirm button — hidden when collapsed */
+#deezer-bpm-badge .dbpm-filter-apply {
+  pointer-events: auto !important;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-left: 1px solid var(--tempo-colors-border-neutral-primary-default, #333);
+  background: transparent;
+  color: var(--tempo-colors-background-accent-primary-default, #a238ff);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s .1s, background .2s;
+}
+
+#deezer-bpm-badge .dbpm-filter-widget--open .dbpm-filter-apply {
+  opacity: 1;
+}
+
+#deezer-bpm-badge .dbpm-filter-apply:hover {
+  background: rgba(162,56,255,.15);
+}
+
 /* ── Inline BPM tags in playlist rows ────────────────────────────────────── */
+
+/* Highlight rows that match active BPM filter */
+[role="row"].dbpm-filter-match {
+  background-color: color-mix(in srgb, var(--tempo-colors-background-accent-primary-default, #a238ff) 12%, transparent) !important;
+}
+
+[role="row"].dbpm-filter-match:hover {
+  background-color: color-mix(in srgb, var(--tempo-colors-background-accent-primary-default, #a238ff) 18%, transparent) !important;
+}
 
 /* ── BPM column tag (inserted before the duration cell in each row) ─────── */
 

@@ -29,6 +29,8 @@
         injectPlaceholders,
         injectQueueBpms,
         removePlaylistBpms,
+        initPlaylistFilter,
+        applyFilterToVisibleRows,
     } = window.DeezerBpm.playlist;
 
     const {
@@ -117,6 +119,8 @@
         } else {
             refreshPlaylistPlaceholders();
         }
+        // Re-apply filter on any observed change
+        applyFilterToVisibleRows();
     }
 
     function handleUrlChange() {
@@ -161,6 +165,7 @@
     checkCacheClear().then(loadPersistedCache).then(() => {
         playlistModeEnabled = localStorage.getItem(STORAGE_KEY) === '1';
         initBadge({ playlistModeEnabled });
+        initPlaylistFilter();
 
         if (playlistModeEnabled) {
             setTimeout(() => setPlaylistMode(true), 900);
