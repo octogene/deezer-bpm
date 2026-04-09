@@ -38,6 +38,11 @@
         return null;
     }
 
+    function getTrackListContainer() {
+        return document.querySelector('.catalog-content')
+            ?? document.querySelector('#page_content');
+    }
+
     function getRowKey(row) {
         const titleEl = row.querySelector('[data-testid="title"]');
         const coverImg = row.querySelector('[data-testid="cover"] img');
@@ -199,7 +204,7 @@
     function injectPlaceholders({ isTrackPage, currentPageUrl, resolveRowTrackId }) {
         if (!isTrackPage || currentPageUrl !== location.pathname) return;
 
-        const catalog = document.querySelector('.catalog-content');
+        const catalog = getTrackListContainer();
         if (!catalog) return;
 
         injectColumnHeader(catalog);
@@ -226,7 +231,7 @@
     }
 
     function removePlaylistBpms() {
-        const catalog = document.querySelector('.catalog-content');
+        const catalog = getTrackListContainer();
         if (!catalog) return;
 
         catalog.querySelectorAll(`.${INLINE_CLASS}, .${HEADER_CLASS}`).forEach(element => element.remove());
@@ -238,6 +243,7 @@
 
     window.DeezerBpm.playlist = {
         findDurationCell,
+        getTrackListContainer,
         getRowKey,
         renderBpmValue,
         createBpmSpan,

@@ -11,6 +11,10 @@
         logDebugInfo,
     } = window.DeezerBpm.utils;
 
+    const {
+        getTrackListContainer,
+    } = window.DeezerBpm.playlist;
+
     let playlistObserver = null;
     let playlistContainerObserver = null;
     let observedCatalog = null;
@@ -23,7 +27,7 @@
     function refreshObservedContainers() {
         if (!playlistObserver) return;
 
-        const catalog = document.querySelector('.catalog-content');
+        const catalog = getTrackListContainer();
         const queueContainer = document.querySelector('.player-queuelist');
 
         if (catalog === observedCatalog && queueContainer === observedQueueContainer) return;
