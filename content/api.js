@@ -112,6 +112,9 @@
 
                 let allTracks = [];
                 let nextUrl = data.tracklist;
+                if (nextUrl === "") {
+                    nextUrl = "https://api.deezer.com/album/" + id + "/tracks"
+                }
 
                 while (nextUrl) {
                     const pageResponse = await fetch(nextUrl);
