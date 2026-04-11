@@ -42,7 +42,7 @@ jobs:
             --source-dir . \
             --artifacts-dir web-ext-artifacts
 
-      - name: Sign extension
+      - name: Sign extension (Firefox)
         if: ${{ !github.event.release.prerelease }}
         env:
           AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
@@ -64,6 +64,17 @@ jobs:
         run: |
           ZIP=$(ls web-ext-artifacts/*.zip | head -1)
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
+
+      - name: Upload to Chrome Web Store
+        if: ${{ !github.event.release.prerelease }}
+        uses: mnao305/chrome-extension-upload@v6.0.0
+        with:
+          file-path: ${{ steps.artifacts.outputs.zip }}
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          client-id: ${{ secrets.CHROME_CLIENT_ID }}
+          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          publish: true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

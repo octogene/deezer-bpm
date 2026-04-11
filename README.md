@@ -97,14 +97,19 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-This requires two repository secrets to be set (**Settings → Secrets → Actions**):
+This requires several repository secrets to be set (**Settings → Secrets → Actions**):
 
 | Secret | Description |
 |---|---|
-| `AMO_API_KEY` | AMO JWT issuer key |
-| `AMO_API_SECRET` | AMO JWT secret |
+| `AMO_API_KEY` | AMO JWT issuer key (Firefox) |
+| `AMO_API_SECRET` | AMO JWT secret (Firefox) |
+| `CHROME_EXTENSION_ID` | The ID of your Chrome extension |
+| `CHROME_CLIENT_ID` | Google OAuth2 Client ID |
+| `CHROME_CLIENT_SECRET` | Google OAuth2 Client Secret |
+| `CHROME_REFRESH_TOKEN` | Google OAuth2 Refresh Token |
 
-Generate them at [addons.mozilla.org/developers/addon/api/key](https://addons.mozilla.org/developers/addon/api/key).
+Generate Firefox secrets at [addons.mozilla.org/developers/addon/api/key](https://addons.mozilla.org/developers/addon/api/key).
+For Chrome, follow the [Google documentation](https://developer.chrome.com/docs/webstore/using-api) to set up API access.
 
 ## License
 
