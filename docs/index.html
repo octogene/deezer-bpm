@@ -190,6 +190,21 @@
       color: var(--muted);
     }
 
+    .version-tag {
+      font-size: .85rem;
+      font-weight: 600;
+      color: var(--purple-lt);
+      margin-top: 20px;
+      margin-bottom: 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      opacity: 0;
+      transition: opacity .3s;
+    }
+    .version-tag.visible { opacity: 1; }
+    .version-tag::before { content: '●'; font-size: .6rem; }
+
     /* ── Contact ── */
     .contact {
       max-width: 860px;
@@ -359,6 +374,9 @@
     </div>
     <h1>Deezer <span>BPM</span></h1>
     <p class="tagline" data-i18n="tagline">See the BPM of every track you play on Deezer — right in the browser, no account needed.</p>
+    <div id="hero-version" class="version-tag">
+      <span data-i18n="latest_version">Latest version</span>: <span class="version-value">v1.0.0</span>
+    </div>
     <div class="cta-row">
       <a class="btn btn-primary" href="https://addons.mozilla.org/fr/firefox/addon/095438db9e754b999a70/" target="_blank" rel="noopener">
         🦊 Firefox Add-ons
@@ -654,6 +672,27 @@
 
     // Close with Escape key
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+
+    // ── Latest Version ──
+    async function fetchLatestVersion() {
+      try {
+        const response = await fetch('https://api.github.com/repos/octogene/deezer-bpm/releases/latest');
+        if (!response.ok) return;
+        const data = await response.json();
+        const version = data.tag_name;
+        if (!version) return;
+
+        document.querySelectorAll('.version-value').forEach(el => {
+          el.textContent = version;
+        });
+        document.querySelectorAll('.version-tag').forEach(el => {
+          el.classList.add('visible');
+        });
+      } catch (e) {
+        console.error('Failed to fetch latest version', e);
+      }
+    }
+    fetchLatestVersion();
   </script>
 
   <script>
@@ -661,6 +700,7 @@
     const translations = {
       fr: {
         tagline: "Voir les BPM de chaque titre sur Deezer — directement dans le navigateur, sans compte requis.",
+        latest_version: "Dernière version",
         cta_firefox: '🦊 Firefox Add-ons <span style="font-size:.8rem;opacity:.7">— Bientôt…</span>',
         cta_chrome: "🌐 Chrome Web Store",
 
