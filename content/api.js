@@ -38,19 +38,18 @@
                 });
             },
 
-            async _run() {
-                if (this.running >= this.max || this.pending.length === 0) return;
+            _run() {
+                while (this.running < this.max && this.pending.length > 0) {
+                    this.running += 1;
+                    const { fn, resolve, reject } = this.pending.shift();
 
-                this.running += 1;
-                const { fn, resolve, reject } = this.pending.shift();
-
-                try {
-                    resolve(await fn());
-                } catch (error) {
-                    reject(error);
-                } finally {
-                    this.running -= 1;
-                    this._run();
+                    Promise.resolve()
+                        .then(fn)
+                        .then(resolve, reject)
+                        .finally(() => {
+                            this.running -= 1;
+                            this._run();
+                        });
                 }
             },
         };
@@ -123,7 +122,9 @@
                     const pageData = await pageResponse.json();
                     if (pageData.error) throw new Error(`API error: ${JSON.stringify(pageData.error)}`);
 
-                    allTracks = allTracks.concat(pageData.data || []);
+                    const tracks = pageData.data || [];
+                    allTracks.push(...tracks);
+
                     nextUrl = pageData.next || null;
                 }
 
