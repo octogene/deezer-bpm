@@ -3,10 +3,8 @@
     "en-US": "Shows the BPM of the currently playing song on Deezer"
   },
   "contributions_url": "https://ko-fi.com/octogene",
-  "categories": [
-    "other"
-  ],
-  "homepage" : {
+  "categories": ["other"],
+  "homepage": {
     "en-US": "https://octogene.github.io/deezer-bpm/"
   },
   "version": {

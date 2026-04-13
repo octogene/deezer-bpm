@@ -19,12 +19,14 @@ A browser extension for Firefox and Chrome that displays the BPM of songs on [De
 ### From a release (recommended)
 
 **Firefox**
+
 1. Download the latest `.xpi` file from the [Releases](../../releases) page
 2. Open Firefox and go to `about:addons`
 3. Click the gear icon → **Install Add-on From File…**
 4. Select the downloaded `.xpi`
 
 **Chrome**
+
 1. Download the latest `.zip` file from the [Releases](../../releases) page
 2. Unzip it
 3. Open Chrome and go to `chrome://extensions`
@@ -99,14 +101,14 @@ git push origin v1.0.0
 
 This requires several repository secrets to be set (**Settings → Secrets → Actions**):
 
-| Secret | Description |
-|---|---|
-| `AMO_API_KEY` | AMO JWT issuer key (Firefox) |
-| `AMO_API_SECRET` | AMO JWT secret (Firefox) |
-| `CHROME_EXTENSION_ID` | The ID of your Chrome extension |
-| `CHROME_CLIENT_ID` | Google OAuth2 Client ID |
-| `CHROME_CLIENT_SECRET` | Google OAuth2 Client Secret |
-| `CHROME_REFRESH_TOKEN` | Google OAuth2 Refresh Token |
+| Secret                 | Description                     |
+| ---------------------- | ------------------------------- |
+| `AMO_API_KEY`          | AMO JWT issuer key (Firefox)    |
+| `AMO_API_SECRET`       | AMO JWT secret (Firefox)        |
+| `CHROME_EXTENSION_ID`  | The ID of your Chrome extension |
+| `CHROME_CLIENT_ID`     | Google OAuth2 Client ID         |
+| `CHROME_CLIENT_SECRET` | Google OAuth2 Client Secret     |
+| `CHROME_REFRESH_TOKEN` | Google OAuth2 Refresh Token     |
 
 Generate Firefox secrets at [addons.mozilla.org/developers/addon/api/key](https://addons.mozilla.org/developers/addon/api/key).
 For Chrome, follow the [Google documentation](https://developer.chrome.com/docs/webstore/using-api) to set up API access.

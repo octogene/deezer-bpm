@@ -1,226 +1,270 @@
 (function () {
-    'use strict';
+  "use strict";
 
-    window.DeezerBpm = window.DeezerBpm || {};
+  window.DeezerBpm = window.DeezerBpm || {};
 
-    const {
-        PLAYLIST_RESCAN_INTERVAL_MS,
-    } = window.DeezerBpm.constants;
+  const {
+    PLAYLIST_RESCAN_INTERVAL_MS,
+    INLINE_CLASS,
+    HEADER_CLASS,
+    BADGE_ID,
+  } = window.DeezerBpm.constants;
 
-    const {
-        logDebugInfo,
-    } = window.DeezerBpm.utils;
+  const { logDebugInfo } = window.DeezerBpm.utils;
 
-    const {
-        getTrackListContainer,
-        applyFilterToVisibleRows,
-    } = window.DeezerBpm.playlist;
+  const { getTrackListContainer, applyFilterToVisibleRows } =
+      window.DeezerBpm.playlist;
 
-    let playlistObserver = null;
-    let playlistContainerObserver = null;
-    let observedCatalog = null;
-    let observedQueueContainer = null;
-    let lastUrl = location.href;
-    let urlChangeTimer = null;
-    let playlistRescanIntervalId = null;
-    let miniplayerReadyObserver = null;
-    let filterApplyScheduled = false;
+  let playlistObserver = null;
+  let playlistContainerObserver = null;
+  let observedCatalog = null;
+  let observedQueueContainer = null;
+  let lastUrl = location.href;
+  let urlChangeTimer = null;
+  let playlistRescanIntervalId = null;
+  let miniplayerReadyObserver = null;
+  let filterApplyScheduled = false;
 
-    function scheduleApplyFilter() {
-        if (filterApplyScheduled) return;
-        filterApplyScheduled = true;
+  function scheduleApplyFilter() {
+    if (filterApplyScheduled) return;
+    filterApplyScheduled = true;
 
-        queueMicrotask(() => {
-            filterApplyScheduled = false;
-            applyFilterToVisibleRows();
-        });
+    queueMicrotask(() => {
+      filterApplyScheduled = false;
+      applyFilterToVisibleRows();
+    });
+  }
+
+  function isDbpmNode(node) {
+    if (!(node instanceof Element)) return false;
+
+    return (
+        node.id === BADGE_ID ||
+        node.classList.contains(INLINE_CLASS) ||
+        node.classList.contains(HEADER_CLASS) ||
+        node.closest(`#${BADGE_ID}`) !== null ||
+        node.closest(`.${INLINE_CLASS}`) !== null ||
+        node.closest(`.${HEADER_CLASS}`) !== null
+    );
+  }
+
+  function hasRelevantPlaylistMutation(mutations) {
+    return mutations.some((mutation) => {
+      if (mutation.type !== "childList") return true;
+
+      const addedRelevant = [...mutation.addedNodes].some(
+          (node) => !isDbpmNode(node),
+      );
+      if (addedRelevant) return true;
+
+      const removedRelevant = [...mutation.removedNodes].some(
+          (node) => !isDbpmNode(node),
+      );
+      return removedRelevant;
+    });
+  }
+
+  function refreshObservedContainers() {
+    if (!playlistObserver) return;
+
+    const catalog = getTrackListContainer();
+    const queueContainer = document.querySelector(".player-queuelist");
+
+    if (
+        catalog === observedCatalog &&
+        queueContainer === observedQueueContainer
+    )
+      return;
+
+    playlistObserver.disconnect();
+
+    if (catalog) {
+      playlistObserver.observe(catalog, { childList: true, subtree: true });
     }
 
-    function refreshObservedContainers() {
-        if (!playlistObserver) return;
-
-        const catalog = getTrackListContainer();
-        const queueContainer = document.querySelector('.player-queuelist');
-
-        if (catalog === observedCatalog && queueContainer === observedQueueContainer) return;
-
-        playlistObserver.disconnect();
-
-        if (catalog) {
-            playlistObserver.observe(catalog, { childList: true, subtree: true });
-        }
-
-        if (queueContainer) {
-            playlistObserver.observe(queueContainer, { childList: true, subtree: true });
-        }
-
-        observedCatalog = catalog;
-        observedQueueContainer = queueContainer;
+    if (queueContainer) {
+      playlistObserver.observe(queueContainer, {
+        childList: true,
+        subtree: true,
+      });
     }
 
-    function startPlaylistObserver({
-                                       onQueueMutation,
-                                       onPlaylistMutation,
-                                   }) {
-        if (!playlistObserver) {
-            playlistObserver = new MutationObserver(() => {
-                onQueueMutation();
+    observedCatalog = catalog;
+    observedQueueContainer = queueContainer;
+  }
 
-                if (onPlaylistMutation) {
-                    onPlaylistMutation();
-                }
+  function startPlaylistObserver({ onQueueMutation, onPlaylistMutation }) {
+    if (!playlistObserver) {
+      playlistObserver = new MutationObserver((mutations) => {
+        if (!hasRelevantPlaylistMutation(mutations)) return;
 
-                scheduleApplyFilter();
-            });
+        onQueueMutation();
+
+        if (onPlaylistMutation) {
+          onPlaylistMutation();
         }
 
-        if (!playlistContainerObserver) {
-            playlistContainerObserver = new MutationObserver(() => {
-                refreshObservedContainers();
-            });
-            playlistContainerObserver.observe(document.documentElement, {
-                childList: true,
-                subtree: true,
-            });
-        }
+        scheduleApplyFilter();
+      });
+    }
 
+    if (!playlistContainerObserver) {
+      playlistContainerObserver = new MutationObserver(() => {
         refreshObservedContainers();
+      });
+      playlistContainerObserver.observe(document.documentElement, {
+        childList: true,
+        subtree: true,
+      });
     }
 
-    function stopPlaylistObserver() {
-        if (playlistObserver) {
-            playlistObserver.disconnect();
-            playlistObserver = null;
-        }
+    refreshObservedContainers();
+  }
 
-        if (playlistContainerObserver) {
-            playlistContainerObserver.disconnect();
-            playlistContainerObserver = null;
-        }
-
-        observedCatalog = null;
-        observedQueueContainer = null;
+  function stopPlaylistObserver() {
+    if (playlistObserver) {
+      playlistObserver.disconnect();
+      playlistObserver = null;
     }
 
-    function onUrlChange(callback) {
-        if (location.href === lastUrl) return;
-        lastUrl = location.href;
-        callback();
+    if (playlistContainerObserver) {
+      playlistContainerObserver.disconnect();
+      playlistContainerObserver = null;
     }
 
-    function scheduleUrlChange(callback, delay = 150) {
-        clearTimeout(urlChangeTimer);
-        urlChangeTimer = setTimeout(() => onUrlChange(callback), delay);
-    }
+    observedCatalog = null;
+    observedQueueContainer = null;
+  }
 
-    function setupMiniplayerObserver({
-                                         onTitleChange,
-                                         onReady,
-                                     }) {
-        const attachObserver = miniplayerEl => {
-            let lastPlayerTitle = null;
-            let miniplayerTimer = null;
+  function onUrlChange(callback) {
+    if (location.href === lastUrl) return;
+    lastUrl = location.href;
+    callback();
+  }
 
-            new MutationObserver(() => {
-                const anchor = miniplayerEl.querySelector('[data-testid="item_title"] a[href*="/album/"]');
-                const title = anchor?.textContent ?? null;
-                if (title === lastPlayerTitle) return;
+  function scheduleUrlChange(callback, delay = 150) {
+    clearTimeout(urlChangeTimer);
+    urlChangeTimer = setTimeout(() => onUrlChange(callback), delay);
+  }
 
-                logDebugInfo('[MINIPLAYER] title changed', lastPlayerTitle, '->', title);
-                lastPlayerTitle = title;
+  function setupMiniplayerObserver({ onTitleChange, onReady }) {
+    const attachObserver = (miniplayerEl) => {
+      let lastPlayerTitle = null;
+      let miniplayerTimer = null;
 
-                onTitleChange?.();
+      new MutationObserver(() => {
+        const anchor = miniplayerEl.querySelector(
+            '[data-testid="item_title"] a[href*="/album/"]',
+        );
+        const title = anchor?.textContent ?? null;
+        if (title === lastPlayerTitle) return;
 
-                clearTimeout(miniplayerTimer);
-                miniplayerTimer = setTimeout(() => {
-                    onReady?.();
-                }, 150);
-            }).observe(miniplayerEl, {
-                childList: true,
-                subtree: true,
-                characterData: true,
-            });
-        };
+        logDebugInfo(
+            "[MINIPLAYER] title changed",
+            lastPlayerTitle,
+            "->",
+            title,
+        );
+        lastPlayerTitle = title;
 
-        const miniplayerEl = document.querySelector('[data-testid="miniplayer_container"]');
-        if (miniplayerEl) {
-            attachObserver(miniplayerEl);
-            return;
-        }
+        onTitleChange?.();
 
-        miniplayerReadyObserver = new MutationObserver(() => {
-            const el = document.querySelector('[data-testid="miniplayer_container"]');
-            if (!el) return;
-
-            miniplayerReadyObserver.disconnect();
-            miniplayerReadyObserver = null;
-
-            attachObserver(el);
-            onReady?.();
-        });
-
-        miniplayerReadyObserver.observe(document.body, {
-            childList: true,
-            subtree: true,
-        });
-    }
-
-    function setupTitleObserver(callback) {
-        const titleEl = document.querySelector('title');
-        if (!titleEl) return;
-
-        new MutationObserver(() => {
-            scheduleUrlChange(callback);
-        }).observe(titleEl, { childList: true });
-    }
-
-    function setupPopstateObserver(callback) {
-        window.addEventListener('popstate', () => {
-            scheduleUrlChange(callback);
-        });
-    }
-
-    function setupPagehideObserver(callback) {
-        window.addEventListener('pagehide', () => {
-            callback();
-        });
-    }
-
-    function startPlaylistRescan(callback) {
-        if (playlistRescanIntervalId !== null) return;
-
-        playlistRescanIntervalId = window.setInterval(() => {
-            callback();
-        }, PLAYLIST_RESCAN_INTERVAL_MS);
-    }
-
-    function stopPlaylistRescan() {
-        if (playlistRescanIntervalId === null) return;
-
-        clearInterval(playlistRescanIntervalId);
-        playlistRescanIntervalId = null;
-    }
-
-    function setupToggleListener(callback) {
-        document.addEventListener('mousedown', event => {
-            if (event.target.closest('.dbpm-list-btn')) {
-                event.stopPropagation();
-                callback();
-            }
-        }, true);
-    }
-
-    window.DeezerBpm.observers = {
-        startPlaylistObserver,
-        stopPlaylistObserver,
-        refreshObservedContainers,
-        scheduleUrlChange,
-        setupMiniplayerObserver,
-        setupTitleObserver,
-        setupPopstateObserver,
-        setupPagehideObserver,
-        startPlaylistRescan,
-        stopPlaylistRescan,
-        setupToggleListener,
+        clearTimeout(miniplayerTimer);
+        miniplayerTimer = setTimeout(() => {
+          onReady?.();
+        }, 150);
+      }).observe(miniplayerEl, {
+        childList: true,
+        subtree: true,
+        characterData: true,
+      });
     };
+
+    const miniplayerEl = document.querySelector(
+        '[data-testid="miniplayer_container"]',
+    );
+    if (miniplayerEl) {
+      attachObserver(miniplayerEl);
+      return;
+    }
+
+    miniplayerReadyObserver = new MutationObserver(() => {
+      const el = document.querySelector('[data-testid="miniplayer_container"]');
+      if (!el) return;
+
+      miniplayerReadyObserver.disconnect();
+      miniplayerReadyObserver = null;
+
+      attachObserver(el);
+      onReady?.();
+    });
+
+    miniplayerReadyObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
+  function setupTitleObserver(callback) {
+    const titleEl = document.querySelector("title");
+    if (!titleEl) return;
+
+    new MutationObserver(() => {
+      scheduleUrlChange(callback);
+    }).observe(titleEl, { childList: true });
+  }
+
+  function setupPopstateObserver(callback) {
+    window.addEventListener("popstate", () => {
+      scheduleUrlChange(callback);
+    });
+  }
+
+  function setupPagehideObserver(callback) {
+    window.addEventListener("pagehide", () => {
+      callback();
+    });
+  }
+
+  function startPlaylistRescan(callback) {
+    if (playlistRescanIntervalId !== null) return;
+
+    playlistRescanIntervalId = window.setInterval(() => {
+      callback();
+    }, PLAYLIST_RESCAN_INTERVAL_MS);
+  }
+
+  function stopPlaylistRescan() {
+    if (playlistRescanIntervalId === null) return;
+
+    clearInterval(playlistRescanIntervalId);
+    playlistRescanIntervalId = null;
+  }
+
+  function setupToggleListener(callback) {
+    document.addEventListener(
+        "mousedown",
+        (event) => {
+          if (event.target.closest(".dbpm-list-btn")) {
+            event.stopPropagation();
+            callback();
+          }
+        },
+        true,
+    );
+  }
+
+  window.DeezerBpm.observers = {
+    startPlaylistObserver,
+    stopPlaylistObserver,
+    refreshObservedContainers,
+    scheduleUrlChange,
+    setupMiniplayerObserver,
+    setupTitleObserver,
+    setupPopstateObserver,
+    setupPagehideObserver,
+    startPlaylistRescan,
+    stopPlaylistRescan,
+    setupToggleListener,
+  };
 })();

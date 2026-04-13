@@ -11,10 +11,7 @@
   },
   "homepage_url": "https://octogene.github.io/deezer-bpm/",
   "permissions": ["storage"],
-  "host_permissions": [
-    "https://www.deezer.com/*",
-    "https://api.deezer.com/*"
-  ],
+  "host_permissions": ["https://www.deezer.com/*", "https://api.deezer.com/*"],
   "browser_specific_settings": {
     "gecko": {
       "id": "{daa6e7d2-9aaf-4898-89a4-0f7224841a44}",

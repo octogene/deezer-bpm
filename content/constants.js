@@ -1,59 +1,65 @@
 (function () {
-    'use strict';
+  "use strict";
 
-    window.DeezerBpm = window.DeezerBpm || {};
+  window.DeezerBpm = window.DeezerBpm || {};
 
-    const constants = {
-        // DOM identifiers
-        BADGE_ID: 'deezer-bpm-badge',
-        INLINE_CLASS: 'dbpm-inline',
-        HEADER_CLASS: 'dbpm-header',
-        INJECTED_ATTR: 'data-dbpm-injected',
-        ROW_KEY_ATTR: 'data-dbpm-key',
-        FILTER_MATCH_CLASS: 'dbpm-filter-match',
-        FILTER_WIDGET_CLASS: 'dbpm-filter-widget',
-        FILTER_WIDGET_OPEN_CLASS: 'dbpm-filter-widget--open',
-        FILTER_BTN_CLASS: 'dbpm-filter-btn',
-        FILTER_BTN_ON_CLASS: 'dbpm-filter-btn--on',
-        FILTER_INPUT_CLASS: 'dbpm-filter-input',
-        FILTER_APPLY_CLASS: 'dbpm-filter-apply',
+  const constants = {
+    // DOM identifiers
+    BADGE_ID: "deezer-bpm-badge",
+    INLINE_CLASS: "dbpm-inline",
+    HEADER_CLASS: "dbpm-header",
+    INJECTED_ATTR: "data-dbpm-injected",
+    ROW_KEY_ATTR: "data-dbpm-key",
+    FILTER_MATCH_CLASS: "dbpm-filter-match",
+    FILTER_WIDGET_CLASS: "dbpm-filter-widget",
+    FILTER_WIDGET_OPEN_CLASS: "dbpm-filter-widget--open",
+    FILTER_BTN_CLASS: "dbpm-filter-btn",
+    FILTER_BTN_ON_CLASS: "dbpm-filter-btn--on",
+    FILTER_INPUT_CLASS: "dbpm-filter-input",
+    FILTER_APPLY_CLASS: "dbpm-filter-apply",
 
-        // Local storage keys
-        PLAYLIST_MODE_KEY: 'deezerBpmPlaylistMode',
-        CLEAR_CACHE_STORAGE_KEY: 'deezerBpmCacheClear',
+    // Local storage keys
+    PLAYLIST_MODE_KEY: "deezerBpmPlaylistMode",
+    CLEAR_CACHE_STORAGE_KEY: "deezerBpmCacheClear",
+    CLEAR_UNRESOLVABLE_CACHE_STORAGE_KEY: "deezerBpmUnresolvableCacheClear",
 
-        // Extension storage keys
-        BPM_CACHE_STORAGE_KEY: 'deezerBpmCache',
-        COVER_CACHE_STORAGE_KEY: 'deezerCoverIdCache',
-        COVER_TRACK_CACHE_STORAGE_KEY: 'deezerCoverTrackCache',
+    // Extension storage keys
+    BPM_CACHE_STORAGE_KEY: "deezerBpmCache",
+    COVER_CACHE_STORAGE_KEY: "deezerCoverIdCache",
+    COVER_TRACK_CACHE_STORAGE_KEY: "deezerCoverTrackCache",
+    UNRESOLVABLE_CACHE_LAST_CLEAR_STORAGE_KEY:
+      "deezerBpmUnresolvableCacheLastClear",
 
-        // Special values
-        COVER_PLACEHOLDER_ID: 'd41d8cd98f00b204e9800998ecf8427e',
-        UNRESOLVABLE: Symbol('unresolvable'),
+    // Special values
+    COVER_PLACEHOLDER_ID: "d41d8cd98f00b204e9800998ecf8427e",
+    UNRESOLVABLE: "__UNRESOLVABLE__",
 
-        // Limits
-        MAX_CACHE_SIZE: 10000,
-        TRACK_QUEUE_CONCURRENCY: 5,
-        ALBUM_QUEUE_CONCURRENCY: 3,
+    // Limits
+    MAX_CACHE_SIZE: 10000,
+    TRACK_QUEUE_CONCURRENCY: 5,
+    ALBUM_QUEUE_CONCURRENCY: 3,
 
-        // Timings
-        PLAYLIST_RESCAN_INTERVAL_MS: 2500,
-        CACHE_SAVE_DEBOUNCE_MS: 2000,
-        BADGE_UPDATE_DELAY_MS: 150,
-        URL_CHANGE_DELAY_MS: 150,
-        MINIPLAYER_UPDATE_DELAY_MS: 150,
-        INITIAL_PLAYLIST_INIT_DELAY_MS: 900,
-        FILTER_DEBOUNCE_DELAY_MS: 200,
-        ROW_COVER_WAIT_MS: 150,
-        ROW_COVER_POLL_INTERVAL_MS: 16,
-        PAGE_RETRY_DELAY_MS: 100,
+    // Timings
+    PLAYLIST_RESCAN_INTERVAL_MS: 2500,
+    CACHE_SAVE_DEBOUNCE_MS: 2000,
+    BADGE_UPDATE_DELAY_MS: 150,
+    URL_CHANGE_DELAY_MS: 150,
+    MINIPLAYER_UPDATE_DELAY_MS: 150,
+    INITIAL_PLAYLIST_INIT_DELAY_MS: 900,
+    FILTER_DEBOUNCE_DELAY_MS: 200,
+    ROW_COVER_WAIT_MS: 150,
+    ROW_COVER_POLL_INTERVAL_MS: 16,
+    PAGE_RETRY_DELAY_MS: 100,
+    UNRESOLVABLE_CACHE_MAX_AGE_MS: 7 * 24 * 60 * 60 * 1000,
 
-        // Debug
-        DEBUG_STORAGE_KEY: 'deezerBpmDebug',
-        LOG_PREFIX: '[Deezer BPM]',
-        DEBUG_BADGE_STYLE: 'color: white; background: #7B2FBE; border-radius: 3px; font-weight: bold',
-        ERROR_BADGE_STYLE: 'color: white; background: red; border-radius: 3px; font-weight: bold',
-    };
+    // Debug
+    DEBUG_STORAGE_KEY: "deezerBpmDebug",
+    LOG_PREFIX: "[Deezer BPM]",
+    DEBUG_BADGE_STYLE:
+      "color: white; background: #7B2FBE; border-radius: 3px; font-weight: bold",
+    ERROR_BADGE_STYLE:
+      "color: white; background: red; border-radius: 3px; font-weight: bold",
+  };
 
-    window.DeezerBpm.constants = constants;
+  window.DeezerBpm.constants = constants;
 })();

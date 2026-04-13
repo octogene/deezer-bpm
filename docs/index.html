@@ -1,787 +1,1080 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Deezer BPM</title>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deezer BPM</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
-    :root {
-      --bg:        #0f0f1a;
-      --surface:   #1a1a2e;
-      --border:    #2a2a44;
-      --purple:    #a238ff;
-      --purple-lt: #c97dff;
-      --green:     #1db954;
-      --text:      #e8e8f0;
-      --muted:     #888;
-    }
+      :root {
+        --bg: #0f0f1a;
+        --surface: #1a1a2e;
+        --border: #2a2a44;
+        --purple: #a238ff;
+        --purple-lt: #c97dff;
+        --green: #1db954;
+        --text: #e8e8f0;
+        --muted: #888;
+      }
 
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      line-height: 1.6;
-    }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
 
-    a { color: var(--purple-lt); text-decoration: none; }
-    a:hover { text-decoration: underline; }
+      a {
+        color: var(--purple-lt);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
 
-    /* ── Hero ── */
-    .hero {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-      padding: 80px 24px 64px;
-      background: radial-gradient(ellipse 70% 50% at 50% 0%, rgba(162,56,255,.18) 0%, transparent 70%);
-    }
+      /* ── Hero ── */
+      .hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 80px 24px 64px;
+        background: radial-gradient(
+          ellipse 70% 50% at 50% 0%,
+          rgba(162, 56, 255, 0.18) 0%,
+          transparent 70%
+        );
+      }
 
-    .badge {
-      width: 80px;
-      height: 80px;
-      border-radius: 50%;
-      background: var(--surface);
-      border: 2.5px solid var(--purple);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 0 32px rgba(162,56,255,.35);
-      margin-bottom: 28px;
-    }
-    .badge-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .1em; }
-    .badge-value { font-size: 22px; font-weight: 800; color: var(--purple-lt); line-height: 1; }
+      .badge {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        background: var(--surface);
+        border: 2.5px solid var(--purple);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 32px rgba(162, 56, 255, 0.35);
+        margin-bottom: 28px;
+      }
+      .badge-label {
+        font-size: 11px;
+        font-weight: 700;
+        color: var(--muted);
+        letter-spacing: 0.1em;
+      }
+      .badge-value {
+        font-size: 22px;
+        font-weight: 800;
+        color: var(--purple-lt);
+        line-height: 1;
+      }
 
-    h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 800; letter-spacing: -.02em; }
-    h1 span { color: var(--purple-lt); }
+      h1 {
+        font-size: clamp(2rem, 5vw, 3rem);
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      h1 span {
+        color: var(--purple-lt);
+      }
 
-    .tagline {
-      margin-top: 16px;
-      font-size: 1.15rem;
-      color: var(--muted);
-      max-width: 480px;
-    }
+      .tagline {
+        margin-top: 16px;
+        font-size: 1.15rem;
+        color: var(--muted);
+        max-width: 480px;
+      }
 
-    .cta-row {
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      justify-content: center;
-      margin-top: 36px;
-    }
+      .cta-row {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin-top: 36px;
+      }
 
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 24px;
-      border-radius: 8px;
-      font-size: .95rem;
-      font-weight: 600;
-      transition: opacity .2s, transform .15s;
-    }
-    .btn:hover { opacity: .85; transform: translateY(-1px); text-decoration: none; }
-    .btn-primary { background: var(--purple); color: #fff; }
-    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 24px;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-weight: 600;
+        transition:
+          opacity 0.2s,
+          transform 0.15s;
+      }
+      .btn:hover {
+        opacity: 0.85;
+        transform: translateY(-1px);
+        text-decoration: none;
+      }
+      .btn-primary {
+        background: var(--purple);
+        color: #fff;
+      }
+      .btn-secondary {
+        background: var(--surface);
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
 
-    /* ── Screenshot ── */
-    .screenshot-wrap {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 0 24px 64px;
-    }
-    .screenshot-wrap img {
-      width: 100%;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      box-shadow: 0 8px 48px rgba(0,0,0,.6);
-    }
+      /* ── Screenshot ── */
+      .screenshot-wrap {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 0 24px 64px;
+      }
+      .screenshot-wrap img {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+      }
 
-    /* ── Features ── */
-    .features {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 0 24px 80px;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 20px;
-    }
+      /* ── Features ── */
+      .features {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 0 24px 80px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 20px;
+      }
 
-    .feature {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 28px 24px;
-    }
-    .feature-icon { font-size: 1.8rem; margin-bottom: 14px; }
-    .feature h3 { font-size: 1rem; font-weight: 700; margin-bottom: 8px; }
-    .feature p { font-size: .9rem; color: var(--muted); line-height: 1.55; }
+      .feature {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 28px 24px;
+      }
+      .feature-icon {
+        font-size: 1.8rem;
+        margin-bottom: 14px;
+      }
+      .feature h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .feature p {
+        font-size: 0.9rem;
+        color: var(--muted);
+        line-height: 1.55;
+      }
 
-    /* ── Install ── */
-    .install {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 0 24px 80px;
-    }
+      /* ── Install ── */
+      .install {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 0 24px 80px;
+      }
 
-    .install h2 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      margin-bottom: 24px;
-      text-align: center;
-    }
+      .install h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 24px;
+        text-align: center;
+      }
 
-    .install-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-      gap: 20px;
-    }
+      .install-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+      }
 
-    .install-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 28px 24px;
-    }
+      .install-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 28px 24px;
+      }
 
-    .install-card h3 {
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+      .install-card h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
 
-    .install-card ol {
-      padding-left: 20px;
-      color: var(--muted);
-      font-size: .9rem;
-      line-height: 1.8;
-    }
+      .install-card ol {
+        padding-left: 20px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        line-height: 1.8;
+      }
 
-    .install-card ol li::marker { color: var(--purple-lt); font-weight: 700; }
+      .install-card ol li::marker {
+        color: var(--purple-lt);
+        font-weight: 700;
+      }
 
-    .download-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      margin-top: 16px;
-      padding: 8px 16px;
-      background: rgba(162,56,255,.15);
-      border: 1px solid rgba(162,56,255,.35);
-      border-radius: 6px;
-      font-size: .85rem;
-      font-weight: 600;
-      color: var(--purple-lt);
-      transition: background .2s;
-    }
-    .download-btn:hover { background: rgba(162,56,255,.25); text-decoration: none; }
-    .download-btn.soon {
-      opacity: .45;
-      cursor: not-allowed;
-      pointer-events: none;
-    }
-    .download-btn .soon-tag {
-      font-size: .75rem;
-      font-weight: 500;
-      color: var(--muted);
-    }
+      .download-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 16px;
+        padding: 8px 16px;
+        background: rgba(162, 56, 255, 0.15);
+        border: 1px solid rgba(162, 56, 255, 0.35);
+        border-radius: 6px;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--purple-lt);
+        transition: background 0.2s;
+      }
+      .download-btn:hover {
+        background: rgba(162, 56, 255, 0.25);
+        text-decoration: none;
+      }
+      .download-btn.soon {
+        opacity: 0.45;
+        cursor: not-allowed;
+        pointer-events: none;
+      }
+      .download-btn .soon-tag {
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--muted);
+      }
 
-    .version-tag {
-      font-size: .85rem;
-      font-weight: 600;
-      color: var(--purple-lt);
-      margin-top: 20px;
-      margin-bottom: 12px;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      opacity: 0;
-      transition: opacity .3s;
-    }
-    .version-tag.visible { opacity: 1; }
-    .version-tag::before { content: '●'; font-size: .6rem; }
+      .version-tag {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: var(--purple-lt);
+        margin-top: 20px;
+        margin-bottom: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .version-tag.visible {
+        opacity: 1;
+      }
+      .version-tag::before {
+        content: "●";
+        font-size: 0.6rem;
+      }
 
-    /* ── Contact ── */
-    .contact {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 0 24px 80px;
-      text-align: center;
-    }
+      /* ── Contact ── */
+      .contact {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 0 24px 80px;
+        text-align: center;
+      }
 
-    .contact h2 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      margin-bottom: 12px;
-    }
+      .contact h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 12px;
+      }
 
-    .contact p {
-      color: var(--muted);
-      margin-bottom: 24px;
-    }
+      .contact p {
+        color: var(--muted);
+        margin-bottom: 24px;
+      }
 
-    /* ── FAQ ── */
-    .faq {
-      max-width: 860px;
-      margin: 0 auto;
-      padding: 0 24px 80px;
-    }
+      /* ── FAQ ── */
+      .faq {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 0 24px 80px;
+      }
 
-    .faq h2 {
-      font-size: 1.5rem;
-      font-weight: 700;
-      margin-bottom: 24px;
-      text-align: center;
-    }
+      .faq h2 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        margin-bottom: 24px;
+        text-align: center;
+      }
 
-    .faq-item {
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      background: var(--surface);
-      margin-bottom: 12px;
-      overflow: hidden;
-    }
+      .faq-item {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        margin-bottom: 12px;
+        overflow: hidden;
+      }
 
-    .faq-question {
-      width: 100%;
-      background: none;
-      border: none;
-      color: var(--text);
-      font-size: 1rem;
-      font-weight: 600;
-      text-align: left;
-      padding: 20px 24px;
-      cursor: pointer;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      transition: color .2s;
-    }
-    .faq-question:hover { color: var(--purple-lt); }
+      .faq-question {
+        width: 100%;
+        background: none;
+        border: none;
+        color: var(--text);
+        font-size: 1rem;
+        font-weight: 600;
+        text-align: left;
+        padding: 20px 24px;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        transition: color 0.2s;
+      }
+      .faq-question:hover {
+        color: var(--purple-lt);
+      }
 
-    .faq-chevron {
-      flex-shrink: 0;
-      font-size: .8rem;
-      transition: transform .25s;
-      color: var(--muted);
-    }
-    .faq-item.open .faq-chevron { transform: rotate(180deg); }
+      .faq-chevron {
+        flex-shrink: 0;
+        font-size: 0.8rem;
+        transition: transform 0.25s;
+        color: var(--muted);
+      }
+      .faq-item.open .faq-chevron {
+        transform: rotate(180deg);
+      }
 
-    .faq-answer {
-      max-height: 0;
-      overflow: hidden;
-      transition: max-height .3s ease, padding .3s ease;
-      padding: 0 24px;
-    }
-    .faq-item.open .faq-answer {
-      max-height: 500px;
-      padding: 0 24px 20px;
-    }
+      .faq-answer {
+        max-height: 0;
+        overflow: hidden;
+        transition:
+          max-height 0.3s ease,
+          padding 0.3s ease;
+        padding: 0 24px;
+      }
+      .faq-item.open .faq-answer {
+        max-height: 500px;
+        padding: 0 24px 20px;
+      }
 
-    .faq-answer p {
-      font-size: .92rem;
-      color: var(--muted);
-      line-height: 1.65;
-    }
+      .faq-answer p {
+        font-size: 0.92rem;
+        color: var(--muted);
+        line-height: 1.65;
+      }
 
-    .faq-answer p + p {
-      margin-top: 12px;
-    }
+      .faq-answer p + p {
+        margin-top: 12px;
+      }
 
-    .faq-answer .faq-label {
-      display: inline-block;
-      font-size: .75rem;
-      font-weight: 700;
-      letter-spacing: .07em;
-      text-transform: uppercase;
-      color: var(--purple-lt);
-      margin-bottom: 4px;
-    }
+      .faq-answer .faq-label {
+        display: inline-block;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.07em;
+        text-transform: uppercase;
+        color: var(--purple-lt);
+        margin-bottom: 4px;
+      }
 
       /* ── Footer ── */
-    footer {
-      text-align: center;
-      padding: 32px 24px;
-      border-top: 1px solid var(--border);
-      font-size: .85rem;
-      color: var(--muted);
-    }
-    footer a { color: var(--muted); }
-    footer a:hover { color: var(--text); }
+      footer {
+        text-align: center;
+        padding: 32px 24px;
+        border-top: 1px solid var(--border);
+        font-size: 0.85rem;
+        color: var(--muted);
+      }
+      footer a {
+        color: var(--muted);
+      }
+      footer a:hover {
+        color: var(--text);
+      }
 
-    /* ── Screenshot ── */
-    .screenshot-wrap {
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 0 24px 64px;
-    }
-    .screenshot-wrap img {
-      width: 100%;
-      border-radius: 12px;
-      border: 1px solid var(--border);
-      box-shadow: 0 8px 48px rgba(0,0,0,.6);
-      cursor: zoom-in;
-    }
+      /* ── Screenshot ── */
+      .screenshot-wrap {
+        max-width: 960px;
+        margin: 0 auto;
+        padding: 0 24px 64px;
+      }
+      .screenshot-wrap img {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid var(--border);
+        box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+        cursor: zoom-in;
+      }
 
-    /* ── Lightbox ── */
-    .lightbox {
-      display: none;
-      position: fixed;
-      inset: 0;
-      z-index: 1000;
-      background: rgba(0, 0, 0, .88);
-      align-items: center;
-      justify-content: center;
-      cursor: zoom-out;
-    }
-    .lightbox.open {
-      display: flex;
-    }
-    .lightbox img {
-      max-width: 92vw;
-      max-height: 92vh;
-      border-radius: 10px;
-      box-shadow: 0 16px 80px rgba(0,0,0,.8);
-      user-select: none;
-    }
-    .lightbox-close {
-      position: fixed;
-      top: 20px;
-      right: 24px;
-      background: none;
-      border: none;
-      color: #fff;
-      font-size: 2rem;
-      line-height: 1;
-      cursor: pointer;
-      opacity: .7;
-      transition: opacity .2s;
-    }
-    .lightbox-close:hover { opacity: 1; }
-  </style>
-</head>
-<body>
+      /* ── Lightbox ── */
+      .lightbox {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        background: rgba(0, 0, 0, 0.88);
+        align-items: center;
+        justify-content: center;
+        cursor: zoom-out;
+      }
+      .lightbox.open {
+        display: flex;
+      }
+      .lightbox img {
+        max-width: 92vw;
+        max-height: 92vh;
+        border-radius: 10px;
+        box-shadow: 0 16px 80px rgba(0, 0, 0, 0.8);
+        user-select: none;
+      }
+      .lightbox-close {
+        position: fixed;
+        top: 20px;
+        right: 24px;
+        background: none;
+        border: none;
+        color: #fff;
+        font-size: 2rem;
+        line-height: 1;
+        cursor: pointer;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+      }
+      .lightbox-close:hover {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="hero">
+      <div class="badge">
+        <span class="badge-label">BPM</span>
+        <span class="badge-value">128</span>
+      </div>
+      <h1>Deezer <span>BPM</span></h1>
+      <p class="tagline" data-i18n="tagline">
+        See the BPM of every track you play on Deezer — right in the browser, no
+        account needed.
+      </p>
+      <div id="hero-version" class="version-tag">
+        <span data-i18n="latest_version">Latest version</span>:
+        <span class="version-value">v1.0.0</span>
+      </div>
+      <div class="cta-row">
+        <a
+          class="btn btn-primary"
+          href="https://addons.mozilla.org/fr/firefox/addon/095438db9e754b999a70/"
+          target="_blank"
+          rel="noopener"
+        >
+          🦊 Firefox Add-ons
+        </a>
+        <a
+          class="btn btn-primary"
+          href="https://chromewebstore.google.com/detail/anaeghchmihjgfkhhngceiemapfcpkpj?utm_source=github"
+          target="_blank"
+          rel="noopener"
+        >
+          🌐 Chrome Web Store
+        </a>
+      </div>
+    </section>
 
-  <section class="hero">
-    <div class="badge">
-      <span class="badge-label">BPM</span>
-      <span class="badge-value">128</span>
+    <div class="screenshot-wrap">
+      <img
+        src="playlist_en.jpg"
+        alt="Deezer BPM showing BPM values in a playlist"
+        id="screenshot"
+      />
     </div>
-    <h1>Deezer <span>BPM</span></h1>
-    <p class="tagline" data-i18n="tagline">See the BPM of every track you play on Deezer — right in the browser, no account needed.</p>
-    <div id="hero-version" class="version-tag">
-      <span data-i18n="latest_version">Latest version</span>: <span class="version-value">v1.0.0</span>
-    </div>
-    <div class="cta-row">
-      <a class="btn btn-primary" href="https://addons.mozilla.org/fr/firefox/addon/095438db9e754b999a70/" target="_blank" rel="noopener">
-        🦊 Firefox Add-ons
+
+    <section class="features">
+      <div class="feature">
+        <div class="feature-icon">🎵</div>
+        <h3 data-i18n="feat1_title">Floating badge</h3>
+        <p data-i18n="feat1_desc">
+          A small badge fixed to the bottom-right corner shows the BPM of the
+          currently playing track, always visible.
+        </p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">≡</div>
+        <h3 data-i18n="feat2_title">Playlist mode</h3>
+        <p data-i18n="feat2_desc">
+          Toggle playlist mode with the ≡ button to show the BPM next to every
+          track in a playlist or album view.
+        </p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔍</div>
+        <h3 data-i18n="feat_selection_title">
+          BPM selection
+          <span
+            style="
+              display: inline-block;
+              font-size: 0.65rem;
+              font-weight: 700;
+              letter-spacing: 0.06em;
+              text-transform: uppercase;
+              color: #b45a00;
+              background: rgba(255, 160, 0, 0.15);
+              border: 1px solid rgba(255, 160, 0, 0.35);
+              border-radius: 4px;
+              padding: 1px 6px;
+              vertical-align: middle;
+              line-height: 1.6;
+            "
+            >Experimental</span
+          >
+        </h3>
+        <p data-i18n="feat_selection_desc">
+          Filter and select tracks by BPM using expressions like
+          <code
+            style="
+              background: rgba(162, 56, 255, 0.15);
+              color: var(--purple-lt);
+              padding: 1px 5px;
+              border-radius: 4px;
+              font-size: 0.85em;
+            "
+            >&gt;120</code
+          >
+          or
+          <code
+            style="
+              background: rgba(162, 56, 255, 0.15);
+              color: var(--purple-lt);
+              padding: 1px 5px;
+              border-radius: 4px;
+              font-size: 0.85em;
+            "
+            >&lt;=90</code
+          >
+          — matched tracks are checked automatically as you scroll.
+        </p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">⚡</div>
+        <h3 data-i18n="feat3_title">Instant &amp; cached</h3>
+        <p data-i18n="feat3_desc">
+          BPM values are cached across sessions so tracks you've seen before
+          load instantly, with no repeated API calls.
+        </p>
+      </div>
+      <div class="feature">
+        <div class="feature-icon">🔑</div>
+        <h3 data-i18n="feat4_title">No API key required</h3>
+        <p data-i18n="feat4_desc">
+          Uses the public Deezer API. No sign-up, no configuration — just
+          install and play a song.
+        </p>
+      </div>
+    </section>
+
+    <section class="faq">
+      <h2 data-i18n="faq_title">FAQ</h2>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_incorrect_q"
+            >Some BPM values look incorrect — is that a bug?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n="faq_incorrect_short">
+            If the extension identified the track correctly, the BPM value it
+            shows is exactly what Deezer's API reports for that track. An
+            incorrect-looking value is most likely inaccurate data on Deezer's
+            side, not a resolution error.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_incorrect_long1">
+            The extension does not compute or estimate BPM itself — it fetches
+            the value directly from the public Deezer API. When the track has
+            been identified with confidence (exact title match against the
+            album's track list), the number displayed is the one Deezer has on
+            record. Considering Deezer's BPM data comes from audio analysis and
+            is not always accurate: values can be halved or doubled, rounded
+            imprecisely, or simply wrong for some tracks.
+          </p>
+          <p data-i18n="faq_incorrect_long2">
+            A good example is <em>Alberto Balsam</em> by Aphex Twin, which
+            Deezer reports at roughly 188 BPM. The track actually sits around
+            94–96 BPM — the analyser locked onto double the real tempo, a common
+            error with relaxed or syncopated grooves where the beat can be
+            interpreted at two different levels.
+          </p>
+          <p data-i18n-html="faq_incorrect_long3">
+            If a value looks off, try cross-referencing it with another source
+            such as
+            <a href="https://www.tunebat.com" target="_blank" rel="noopener"
+              >Tunebat</a
+            >
+            or
+            <a href="https://songbpm.com" target="_blank" rel="noopener"
+              >SongBPM</a
+            >. If those agree with Deezer, the value is likely correct. If they
+            consistently disagree, the inaccuracy is in Deezer's data and cannot
+            be corrected by the extension.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_sort_q"
+            >Why can't we sort the playlist by BPM?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n="faq_sort_short">
+            BPM values are fetched one by one as you scroll through a playlist —
+            so until you've scrolled through every track, the extension simply
+            doesn't have all the numbers it would need to sort the full list.
+            Deezer also doesn't offer a built-in way for extensions to reorder
+            tracks, so sorting would have to happen on top of the existing
+            interface, which isn't currently supported.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_sort_long">
+            Deezer uses a virtualised list to render playlists: only the rows
+            currently visible on screen exist in the DOM, and they are recycled
+            as you scroll. This means the extension can only fetch and display
+            BPM values for tracks that have been rendered at least once. Without
+            a complete dataset for every track, a meaningful sort isn't
+            possible. On top of that, reordering the rows would require taking
+            over Deezer's own DOM management, which is fragile and likely to
+            break with any Deezer update. A future version may offer an export
+            of BPM data or a sorted overlay view, but true in-place sorting is
+            not planned for now.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_filter_q"
+            >How does BPM selection and filtering work?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n="faq_filter_short">
+            You can use the filter icon in the BPM badge to highlight and
+            automatically select tracks that match a specific BPM range. The
+            filter is active only as long as the input is expanded (open);
+            closing the filter input deactivates the filtering logic and clears
+            current highlights.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_filter_long1">
+            The filter supports several expressions:
+            <code>&gt;120</code> (greater than 120), <code>&lt;=90</code> (less
+            than or equal to 90), <code>120-130</code> (between 120 and 130), or
+            a simple <code>124</code> (exact match). When a filter is active,
+            rows that match the criteria are highlighted with a subtle
+            background color.
+          </p>
+          <p data-i18n="faq_filter_long2">
+            If you are in a playlist or album view, the extension will also
+            automatically click the selection checkbox for every matching track
+            as it comes into view while you scroll. This makes it easy to then
+            perform bulk actions, like "Add to playlist" or "Add to queue",
+            using Deezer's own tools. Closing the filter input (by clicking the
+            filter icon again) will clear the highlights and deactivate the
+            filter, but will keep already-selected tracks checked so you don't
+            lose your work.
+          </p>
+          <p data-i18n="faq_filter_long3">
+            <strong>Note:</strong> Due to the way the extension interacts with
+            Deezer's programmatic checkbox selection, you may experience minor
+            "scroll glitches" or UI jumps while scrolling through large
+            playlists with an active filter. This is a side-effect of ensuring
+            tracks are correctly registered by Deezer's selection system.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_queue_diff_q"
+            >Why are BPM values in the queue list sometimes different from the
+            badge or from what they were before?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n="faq_queue_diff_short">
+            The badge, the playlist/album page and the queue rows identify
+            tracks through different paths. When they haven't been seen before,
+            queue rows may resolve to a different version of the same track —
+            for example a single release instead of the album version — which
+            can carry a slightly different BPM value.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_queue_diff_long1">
+            The badge identifies the currently playing track by reading the
+            album link directly from the player bar, then matching the track
+            title against that album's track list. Queue rows don't have an
+            album link in their DOM, so when no cached result is available the
+            extension falls back to a title + artist search via the Deezer API,
+            which may return a different release of the same song.
+          </p>
+          <p data-i18n="faq_queue_diff_long2">
+            Once a track has been resolved once, the result is cached and reused
+            on subsequent visits, so the values stabilise over time. Clearing
+            the extension cache (via the browser's extension storage) resets all
+            resolutions and may cause the discrepancy to reappear temporarily.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_queue_slow_q"
+            >Why do BPM values in the queue list sometimes take longer to
+            appear?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n="faq_queue_slow_short">
+            Queue rows that haven't been seen before require an extra search API
+            call to identify the track, and that result isn't always cached — so
+            the same lookup may happen again next time.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_queue_slow_long1">
+            When a queue row has no album link in its DOM and no prior cached
+            entry, the extension queries the Deezer search API using the track
+            title and artist name. This is slower than a direct album lookup,
+            and search results are only cached when the extension can
+            confidently match the result to the cover image shown in the row. If
+            the match isn't considered exact enough, the result is discarded and
+            the search will run again on the next visit.
+          </p>
+          <p data-i18n="faq_queue_slow_long2">
+            Tracks that have been seen in a playlist or album page first are
+            resolved through a faster path and will always display their BPM
+            instantly in the queue, since their track ID is already known from
+            that earlier visit.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_x_q"
+            >Why do some tracks show a ✕ instead of a BPM value?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n="faq_x_short">
+            A ✕ means the extension was unable to identify the track after
+            exhausting all available strategies. The row won't be retried until
+            you reload the page.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_x_long1">
+            To show a BPM, the extension must first resolve the track to a
+            Deezer track ID. It tries several strategies in order: a fast
+            cover-image cache lookup, then fetching the album's track list and
+            matching by title, and finally a title + artist search via the
+            Deezer API (used for queue rows that have no album link). A ✕
+            appears when all of these fail — for example because the track title
+            in the DOM doesn't closely match anything the API returns, the cover
+            image hasn't loaded in time, or the Deezer API itself returned an
+            error.
+          </p>
+          <p data-i18n-html="faq_x_long2">
+            Reloading the page often fixes the issue, as cover images and DOM
+            metadata may be fully available on a second pass. Scrolling the
+            problematic track out of view and back can also trigger a fresh
+            resolution attempt, since Deezer recycles list rows as you scroll
+            and the extension will retry any row that re-enters the viewport.
+            Note that ✕ is different from "N/A": N/A means the track
+            <em>was</em> identified but Deezer simply has no BPM data for it.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="contact">
+      <h2 data-i18n="contact_title">Contact</h2>
+      <p data-i18n="contact_desc">
+        Have a suggestion or found a bug? Feel free to reach out!
+      </p>
+      <a
+        class="btn btn-secondary"
+        href="mailto:je9ytwjoz@mozmail.com?subject=Deezer%20BPM%20-%20Feedback"
+        data-i18n="contact_btn"
+      >
+        ✉️ Send feedback
       </a>
-      <a class="btn btn-primary"  href="https://chromewebstore.google.com/detail/anaeghchmihjgfkhhngceiemapfcpkpj?utm_source=github" target="_blank" rel="noopener">
-        🌐 Chrome Web Store
+      <a
+        data-i18n="contact_github"
+        class="btn btn-secondary"
+        href="https://github.com/octogene/deezer-bpm/issues/new"
+        target="_blank"
+        rel="noopener"
+      >
+        🐛 Open an issue on GitHub
       </a>
-    </div>
-  </section>
+    </section>
 
-  <div class="screenshot-wrap">
-    <img src="playlist_en.jpg" alt="Deezer BPM showing BPM values in a playlist" id="screenshot" />
-  </div>
+    <footer>
+      <p>
+        MIT License &nbsp;·&nbsp;
+        <a href="https://github.com/octogene/deezer-bpm">Source on GitHub</a>
+        &nbsp;·&nbsp; BPM data from the
+        <a href="https://developers.deezer.com/api">Deezer API</a>
+      </p>
+    </footer>
 
-  <section class="features">
-    <div class="feature">
-      <div class="feature-icon">🎵</div>
-      <h3 data-i18n="feat1_title">Floating badge</h3>
-      <p data-i18n="feat1_desc">A small badge fixed to the bottom-right corner shows the BPM of the currently playing track, always visible.</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">≡</div>
-      <h3 data-i18n="feat2_title">Playlist mode</h3>
-      <p data-i18n="feat2_desc">Toggle playlist mode with the ≡ button to show the BPM next to every track in a playlist or album view.</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">🔍</div>
-      <h3 data-i18n="feat_selection_title">BPM selection <span style="display:inline-block;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#b45a00;background:rgba(255,160,0,.15);border:1px solid rgba(255,160,0,.35);border-radius:4px;padding:1px 6px;vertical-align:middle;line-height:1.6">Experimental</span></h3>
-      <p data-i18n="feat_selection_desc">Filter and select tracks by BPM using expressions like <code style="background:rgba(162,56,255,.15);color:var(--purple-lt);padding:1px 5px;border-radius:4px;font-size:.85em">&gt;120</code> or <code style="background:rgba(162,56,255,.15);color:var(--purple-lt);padding:1px 5px;border-radius:4px;font-size:.85em">&lt;=90</code> — matched tracks are checked automatically as you scroll.</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">⚡</div>
-      <h3 data-i18n="feat3_title">Instant &amp; cached</h3>
-      <p data-i18n="feat3_desc">BPM values are cached across sessions so tracks you've seen before load instantly, with no repeated API calls.</p>
-    </div>
-    <div class="feature">
-      <div class="feature-icon">🔑</div>
-      <h3 data-i18n="feat4_title">No API key required</h3>
-      <p data-i18n="feat4_desc">Uses the public Deezer API. No sign-up, no configuration — just install and play a song.</p>
-    </div>
-  </section>
-
-  <section class="faq">
-    <h2 data-i18n="faq_title">FAQ</h2>
-
-    <div class="faq-item">
-      <button class="faq-question" aria-expanded="false">
-        <span data-i18n="faq_incorrect_q">Some BPM values look incorrect — is that a bug?</span>
-        <span class="faq-chevron">▼</span>
+    <!-- Lightbox -->
+    <div
+      class="lightbox"
+      id="lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Screenshot fullscreen"
+    >
+      <button class="lightbox-close" id="lightbox-close" aria-label="Close">
+        ✕
       </button>
-      <div class="faq-answer" role="region">
-        <span class="faq-label" data-i18n="faq_short">In short</span>
-        <p data-i18n="faq_incorrect_short">
-          If the extension identified the track correctly, the BPM value it shows is exactly
-          what Deezer's API reports for that track. An incorrect-looking value is most likely
-          inaccurate data on Deezer's side, not a resolution error.
-        </p>
-        <span class="faq-label" style="margin-top: 16px; display: inline-block;" data-i18n="faq_curious">For the curious</span>
-        <p data-i18n="faq_incorrect_long1">
-          The extension does not compute or estimate BPM itself — it fetches the value directly
-          from the public Deezer API. When the track has been identified with confidence (exact
-          title match against the album's track list), the number displayed is the one Deezer
-          has on record. Considering Deezer's BPM data comes from audio analysis and
-          is not always accurate: values can be halved or doubled, rounded imprecisely, or simply
-          wrong for some tracks.
-        </p>
-        <p data-i18n="faq_incorrect_long2">
-          A good example is <em>Alberto Balsam</em> by Aphex Twin, which Deezer reports at
-          roughly 188 BPM. The track actually sits around 94–96 BPM — the analyser locked onto
-          double the real tempo, a common error with relaxed or syncopated grooves where the beat
-          can be interpreted at two different levels.
-        </p>
-        <p data-i18n-html="faq_incorrect_long3">
-          If a value looks off, try cross-referencing it with another source such as
-          <a href="https://www.tunebat.com" target="_blank" rel="noopener">Tunebat</a> or
-          <a href="https://songbpm.com" target="_blank" rel="noopener">SongBPM</a>.
-          If those agree with Deezer, the value is likely correct. If they consistently
-          disagree, the inaccuracy is in Deezer's data and cannot be corrected by the extension.
-        </p>
-      </div>
+      <img
+        src="playlist_en.jpg"
+        alt="Deezer BPM showing BPM values in a playlist — fullscreen"
+      />
     </div>
 
-    <div class="faq-item">
-      <button class="faq-question" aria-expanded="false">
-        <span data-i18n="faq_sort_q">Why can't we sort the playlist by BPM?</span>
-        <span class="faq-chevron">▼</span>
-      </button>
-      <div class="faq-answer" role="region">
-        <span class="faq-label" data-i18n="faq_short">In short</span>
-        <p data-i18n="faq_sort_short">
-          BPM values are fetched one by one as you scroll through a playlist — so until you've
-          scrolled through every track, the extension simply doesn't have all the numbers it
-          would need to sort the full list. Deezer also doesn't offer a built-in way for
-          extensions to reorder tracks, so sorting would have to happen on top of the existing
-          interface, which isn't currently supported.
-        </p>
-        <span class="faq-label" style="margin-top: 16px; display: inline-block;" data-i18n="faq_curious">For the curious</span>
-        <p data-i18n="faq_sort_long">
-          Deezer uses a virtualised list to render playlists: only the rows currently visible
-          on screen exist in the DOM, and they are recycled as you scroll. This means the
-          extension can only fetch and display BPM values for tracks that have been rendered at
-          least once. Without a complete dataset for every track, a meaningful sort isn't
-          possible. On top of that, reordering the rows would require taking over Deezer's own
-          DOM management, which is fragile and likely to break with any Deezer update. A future
-          version may offer an export of BPM data or a sorted overlay view, but true in-place
-          sorting is not planned for now.
-        </p>
-      </div>
-    </div>
-
-    <div class="faq-item">
-      <button class="faq-question" aria-expanded="false">
-        <span data-i18n="faq_filter_q">How does BPM selection and filtering work?</span>
-        <span class="faq-chevron">▼</span>
-      </button>
-      <div class="faq-answer" role="region">
-        <span class="faq-label" data-i18n="faq_short">In short</span>
-        <p data-i18n="faq_filter_short">
-          You can use the filter icon in the BPM badge to highlight and automatically select
-          tracks that match a specific BPM range. The filter is active only as long as the
-          input is expanded (open); closing the filter input deactivates the filtering
-          logic and clears current highlights.
-        </p>
-        <span class="faq-label" style="margin-top: 16px; display: inline-block;" data-i18n="faq_curious">For the curious</span>
-        <p data-i18n="faq_filter_long1">
-          The filter supports several expressions: <code>&gt;120</code> (greater than 120),
-          <code>&lt;=90</code> (less than or equal to 90), <code>120-130</code> (between 120 and 130),
-          or a simple <code>124</code> (exact match). When a filter is active, rows that match
-          the criteria are highlighted with a subtle background color.
-        </p>
-        <p data-i18n="faq_filter_long2">
-          If you are in a playlist or album view, the extension will also automatically click
-          the selection checkbox for every matching track as it comes into view while you scroll.
-          This makes it easy to then perform bulk actions, like "Add to playlist" or "Add to queue",
-          using Deezer's own tools. Closing the filter input (by clicking the filter icon again)
-          will clear the highlights and deactivate the filter, but will keep already-selected 
-          tracks checked so you don't lose your work.
-        </p>
-        <p data-i18n="faq_filter_long3">
-          <strong>Note:</strong> Due to the way the extension interacts with Deezer's programmatic 
-          checkbox selection, you may experience minor "scroll glitches" or UI jumps while 
-          scrolling through large playlists with an active filter. This is a side-effect of 
-          ensuring tracks are correctly registered by Deezer's selection system.
-        </p>
-      </div>
-    </div>
-
-    <div class="faq-item">
-      <button class="faq-question" aria-expanded="false">
-        <span data-i18n="faq_queue_diff_q">Why are BPM values in the queue list sometimes different from the badge or from what they were before?</span>
-        <span class="faq-chevron">▼</span>
-      </button>
-      <div class="faq-answer" role="region">
-        <span class="faq-label" data-i18n="faq_short">In short</span>
-        <p data-i18n="faq_queue_diff_short">
-          The badge, the playlist/album page and the queue rows identify tracks through different paths.
-          When they haven't been seen before, queue rows may resolve to a different version
-          of the same track — for example a single release instead of the album version —
-          which can carry a slightly different BPM value.
-        </p>
-        <span class="faq-label" style="margin-top: 16px; display: inline-block;" data-i18n="faq_curious">For the curious</span>
-        <p data-i18n="faq_queue_diff_long1">
-          The badge identifies the currently playing track by reading the album link directly
-          from the player bar, then matching the track title against that album's track list.
-          Queue rows don't have an album link in their DOM, so when no cached result
-          is available the extension falls back to a title + artist search via the Deezer API,
-          which may return a different release of the same song.
-        </p>
-        <p data-i18n="faq_queue_diff_long2">
-          Once a track has been resolved once, the result is cached and reused on subsequent
-          visits, so the values stabilise over time. Clearing the extension cache
-          (via the browser's extension storage) resets all resolutions and may cause the
-          discrepancy to reappear temporarily.
-        </p>
-      </div>
-    </div>
-
-    <div class="faq-item">
-      <button class="faq-question" aria-expanded="false">
-        <span data-i18n="faq_queue_slow_q">Why do BPM values in the queue list sometimes take longer to appear?</span>
-        <span class="faq-chevron">▼</span>
-      </button>
-      <div class="faq-answer" role="region">
-        <span class="faq-label" data-i18n="faq_short">In short</span>
-        <p data-i18n="faq_queue_slow_short">
-          Queue rows that haven't been seen before require an extra search API call to identify
-          the track, and that result isn't always cached — so the same lookup may happen again
-          next time.
-        </p>
-        <span class="faq-label" style="margin-top: 16px; display: inline-block;" data-i18n="faq_curious">For the curious</span>
-        <p data-i18n="faq_queue_slow_long1">
-          When a queue row has no album link in its DOM and no prior cached entry, the extension
-          queries the Deezer search API using the track title and artist name. This is slower
-          than a direct album lookup, and search results are only cached when the extension
-          can confidently match the result to the cover image shown in the row. If the match
-          isn't considered exact enough, the result is discarded and the search will run again
-          on the next visit.
-        </p>
-        <p data-i18n="faq_queue_slow_long2">
-          Tracks that have been seen in a playlist or album page first are resolved through a
-          faster path and will always display their BPM instantly in the queue, since their
-          track ID is already known from that earlier visit.
-        </p>
-      </div>
-    </div>
-
-    <div class="faq-item">
-      <button class="faq-question" aria-expanded="false">
-        <span data-i18n="faq_x_q">Why do some tracks show a ✕ instead of a BPM value?</span>
-        <span class="faq-chevron">▼</span>
-      </button>
-      <div class="faq-answer" role="region">
-        <span class="faq-label" data-i18n="faq_short">In short</span>
-        <p data-i18n="faq_x_short">
-          A ✕ means the extension was unable to identify the track after exhausting all available
-          strategies. The row won't be retried until you reload the page.
-        </p>
-        <span class="faq-label" style="margin-top: 16px; display: inline-block;" data-i18n="faq_curious">For the curious</span>
-        <p data-i18n="faq_x_long1">
-          To show a BPM, the extension must first resolve the track to a Deezer track ID. It tries
-          several strategies in order: a fast cover-image cache lookup, then fetching the album's
-          track list and matching by title, and finally a title + artist search via the Deezer API
-          (used for queue rows that have no album link). A ✕ appears when all of these fail — for
-          example because the track title in the DOM doesn't closely match anything the API returns,
-          the cover image hasn't loaded in time, or the Deezer API itself returned an error.
-        </p>
-        <p data-i18n-html="faq_x_long2">
-          Reloading the page often fixes the issue, as cover images and DOM metadata may be fully
-          available on a second pass. Scrolling the problematic track out of view and back can also
-          trigger a fresh resolution attempt, since Deezer recycles list rows as you scroll and the
-          extension will retry any row that re-enters the viewport. Note that ✕ is different from
-          "N/A": N/A means the track <em>was</em> identified but Deezer simply has no BPM data for it.
-        </p>
-      </div>
-    </div>
-
-  </section>
-
-  <section class="contact">
-    <h2 data-i18n="contact_title">Contact</h2>
-    <p data-i18n="contact_desc">Have a suggestion or found a bug? Feel free to reach out!</p>
-    <a class="btn btn-secondary" href="mailto:je9ytwjoz@mozmail.com?subject=Deezer%20BPM%20-%20Feedback" data-i18n="contact_btn">
-      ✉️ Send feedback
-    </a>
-    <a data-i18n="contact_github" class="btn btn-secondary" href="https://github.com/octogene/deezer-bpm/issues/new" target="_blank" rel="noopener">
-      🐛 Open an issue on GitHub
-    </a>
-  </section>
-
-  <footer>
-    <p>
-      MIT License &nbsp;·&nbsp;
-      <a href="https://github.com/octogene/deezer-bpm">Source on GitHub</a> &nbsp;·&nbsp;
-      BPM data from the <a href="https://developers.deezer.com/api">Deezer API</a>
-    </p>
-  </footer>
-
-  <!-- Lightbox -->
-  <div class="lightbox" id="lightbox" role="dialog" aria-modal="true" aria-label="Screenshot fullscreen">
-    <button class="lightbox-close" id="lightbox-close" aria-label="Close">✕</button>
-    <img src="playlist_en.jpg" alt="Deezer BPM showing BPM values in a playlist — fullscreen" />
-  </div>
-
-  <script>
-    document.querySelectorAll('.faq-question').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const item = btn.closest('.faq-item');
-        const isOpen = item.classList.contains('open');
-        // Close all open items
-        document.querySelectorAll('.faq-item.open').forEach(el => {
-          el.classList.remove('open');
-          el.querySelector('.faq-question').setAttribute('aria-expanded', 'false');
+    <script>
+      document.querySelectorAll(".faq-question").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const item = btn.closest(".faq-item");
+          const isOpen = item.classList.contains("open");
+          // Close all open items
+          document.querySelectorAll(".faq-item.open").forEach((el) => {
+            el.classList.remove("open");
+            el.querySelector(".faq-question").setAttribute(
+              "aria-expanded",
+              "false",
+            );
+          });
+          // Toggle the clicked one
+          if (!isOpen) {
+            item.classList.add("open");
+            btn.setAttribute("aria-expanded", "true");
+          }
         });
-        // Toggle the clicked one
-        if (!isOpen) {
-          item.classList.add('open');
-          btn.setAttribute('aria-expanded', 'true');
+      });
+
+      // ── Lightbox ──
+      const lightbox = document.getElementById("lightbox");
+      const lightboxClose = document.getElementById("lightbox-close");
+      const screenshot = document.getElementById("screenshot");
+
+      function openLightbox() {
+        lightbox.classList.add("open");
+        document.body.style.overflow = "hidden";
+      }
+      function closeLightbox() {
+        lightbox.classList.remove("open");
+        document.body.style.overflow = "";
+      }
+
+      screenshot.addEventListener("click", openLightbox);
+      lightboxClose.addEventListener("click", (e) => {
+        e.stopPropagation();
+        closeLightbox();
+      });
+      lightbox.addEventListener("click", closeLightbox); // click on backdrop closes it
+
+      // Close with Escape key
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeLightbox();
+      });
+
+      // ── Latest Version ──
+      async function fetchLatestVersion() {
+        try {
+          const response = await fetch(
+            "https://api.github.com/repos/octogene/deezer-bpm/releases/latest",
+          );
+          if (!response.ok) return;
+          const data = await response.json();
+          const version = data.tag_name;
+          if (!version) return;
+
+          document.querySelectorAll(".version-value").forEach((el) => {
+            el.textContent = version;
+          });
+          document.querySelectorAll(".version-tag").forEach((el) => {
+            el.classList.add("visible");
+          });
+        } catch (e) {
+          console.error("Failed to fetch latest version", e);
         }
-      });
-    });
+      }
+      fetchLatestVersion();
+    </script>
 
-    // ── Lightbox ──
-    const lightbox      = document.getElementById('lightbox');
-    const lightboxClose = document.getElementById('lightbox-close');
-    const screenshot    = document.getElementById('screenshot');
+    <script>
+      // ── i18n ──────────────────────────────────────────────────────────────────
+      const translations = {
+        fr: {
+          tagline:
+            "Voir les BPM de chaque titre sur Deezer — directement dans le navigateur, sans compte requis.",
+          latest_version: "Dernière version",
+          cta_firefox:
+            '🦊 Firefox Add-ons <span style="font-size:.8rem;opacity:.7">— Bientôt…</span>',
+          cta_chrome: "🌐 Chrome Web Store",
 
-    function openLightbox()  { lightbox.classList.add('open');    document.body.style.overflow = 'hidden'; }
-    function closeLightbox() { lightbox.classList.remove('open'); document.body.style.overflow = ''; }
+          feat1_title: "Badge flottant",
+          feat1_desc:
+            "Un petit badge fixé en bas à droite affiche les BPM du titre en cours de lecture, toujours visible.",
+          feat2_title: "Mode playlist",
+          feat2_desc:
+            "Activez le mode playlist avec le bouton ≡ pour afficher les BPM à côté de chaque titre dans une playlist ou un album.",
+          feat_selection_title:
+            'Sélection par BPM <span style="display:inline-block;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#b45a00;background:rgba(255,160,0,.15);border:1px solid rgba(255,160,0,.35);border-radius:4px;padding:1px 6px;vertical-align:middle;line-height:1.6">Expérimental</span>',
+          feat_selection_desc:
+            'Filtrez et sélectionnez les titres par BPM en utilisant des expressions comme <code style="background:rgba(162,56,255,.15);color:var(--purple-lt);padding:1px 5px;border-radius:4px;font-size:.85em">&gt;120</code> ou <code style="background:rgba(162,56,255,.15);color:var(--purple-lt);padding:1px 5px;border-radius:4px;font-size:.85em">&lt;=90</code> — les titres correspondants sont cochés automatiquement lors du défilement.',
+          feat3_title: "Instantané &amp; en cache",
+          feat3_desc:
+            "Les valeurs BPM sont mises en cache entre les sessions pour que les titres déjà consultés s'affichent instantanément, sans nouvel appel API.",
+          feat4_title: "Aucune clé API requise",
+          feat4_desc:
+            "Utilise l'API publique Deezer. Aucune inscription, aucune configuration — il suffit de l'installer et lancer un morceau.",
 
-    screenshot.addEventListener('click', openLightbox);
-    lightboxClose.addEventListener('click', (e) => { e.stopPropagation(); closeLightbox(); });
-    lightbox.addEventListener('click', closeLightbox);   // click on backdrop closes it
+          faq_title: "FAQ",
+          faq_short: "En bref",
+          faq_curious: "Pour les curieux",
 
-    // Close with Escape key
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+          faq_incorrect_q:
+            "Certaines valeurs BPM semblent incorrectes — est-ce un bug ?",
+          faq_incorrect_short:
+            "Si l'extension a correctement identifié le titre, la valeur BPM affichée est exactement celle que l'API Deezer indique. Une valeur qui semble erronée provient très probablement de données inexactes côté Deezer, pas d'une erreur de résolution.",
+          faq_incorrect_long1:
+            "L'extension ne calcule pas elle-même les BPM — elle récupère la valeur directement depuis l'API publique Deezer. Lorsque le titre a été identifié avec certitude (correspondance exacte du titre dans la liste de l'album), le nombre affiché est celui enregistré par Deezer. Les données BPM de Deezer proviennent d'une analyse audio et ne sont pas toujours précises : les valeurs peuvent être divisées ou doublées, arrondies grossièrement, ou tout simplement erronées pour certains titres.",
+          faq_incorrect_long2:
+            "Un bon exemple est <em>Alberto Balsam</em> d'Aphex Twin, que Deezer indique à environ 188 BPM. Le titre se situe en réalité autour de 94–96 BPM — l'analyseur a verrouillé sur le double du tempo réel, une erreur fréquente avec les grooves relaxés ou syncopés où le tempo peut être interprété à deux niveaux différents.",
+          faq_incorrect_long3:
+            'Si une valeur semble incorrecte, vérifiez-la sur une autre source comme <a href="https://www.tunebat.com" target="_blank" rel="noopener">Tunebat</a> ou <a href="https://songbpm.com" target="_blank" rel="noopener">SongBPM</a>. Si elles concordent avec Deezer, la valeur est probablement correcte. Si elles divergent systématiquement, l\'inexactitude provient des données Deezer et ne peut pas être corrigée par l\'extension.',
 
-    // ── Latest Version ──
-    async function fetchLatestVersion() {
-      try {
-        const response = await fetch('https://api.github.com/repos/octogene/deezer-bpm/releases/latest');
-        if (!response.ok) return;
-        const data = await response.json();
-        const version = data.tag_name;
-        if (!version) return;
+          faq_sort_q: "Pourquoi ne peut-on pas trier la playlist par BPM ?",
+          faq_sort_short:
+            "Les valeurs BPM sont récupérées une par une au fur et à mesure du défilement — tant que vous n'avez pas fait défiler tous les titres, l'extension n'a pas toutes les données nécessaires pour effectuer un tri. Deezer ne propose pas non plus de moyen natif pour les extensions de réordonner les titres.",
+          faq_sort_long:
+            "Deezer utilise une liste virtualisée pour afficher les playlists : seules les lignes visibles à l'écran existent dans le DOM et sont recyclées au défilement. Cela signifie que l'extension ne peut récupérer et afficher les BPM que des titres ayant été rendus au moins une fois. Sans données complètes pour chaque titre, un tri pertinent n'est pas possible. De plus, réordonner les lignes nécessiterait de prendre le contrôle de la gestion DOM de Deezer, ce qui est fragile et risque de se briser à chaque mise à jour. Une future version pourra proposer un export des données BPM, mais le tri en place n'est pas prévu pour l'instant.",
 
-        document.querySelectorAll('.version-value').forEach(el => {
-          el.textContent = version;
+          faq_filter_q:
+            "Comment fonctionnent la sélection et le filtrage par BPM ?",
+          faq_filter_short:
+            "Vous pouvez utiliser l'icône de filtre dans le badge BPM pour mettre en évidence et sélectionner automatiquement les titres correspondant à une plage de BPM spécifique. Le filtre est actif uniquement tant que le champ de saisie est déployé ; la fermeture du champ désactive la logique de filtrage et efface les mises en évidence.",
+          faq_filter_long1:
+            "Le filtre prend en charge plusieurs expressions : <code>>120</code> (supérieur à 120), <code><=90</code> (inférieur ou égal à 90), <code>120-130</code> (entre 120 et 130), ou un simple <code>124</code> (correspondance exacte). Lorsqu'un filtre est actif, les lignes correspondant aux critères sont mises en évidence par une légère couleur de fond.",
+          faq_filter_long2:
+            "Si vous êtes dans une vue playlist ou album, l'extension cochera également automatiquement la case de sélection de chaque titre correspondant au fur et à mesure qu'il apparaît lors du défilement. Cela facilite ensuite les actions groupées, comme « Ajouter à une playlist » ou « Ajouter à la file d'attente », en utilisant les outils natifs de Deezer. Fermer le champ de filtre (en recliquant sur l'icône) effacera les mises en évidence et désactivera le filtre, mais conservera les titres déjà sélectionnés cochés.",
+          faq_filter_long3:
+            "<strong>Note :</strong> En raison de la manière dont l'extension interagit avec le système de cases à cocher de Deezer, vous pouvez rencontrer de légers « sauts » d'interface lors du défilement de grandes playlists avec un filtre actif. C'est un effet secondaire nécessaire pour garantir que les titres sont correctement enregistrés par le système de sélection de Deezer.",
+
+          faq_queue_diff_q:
+            "Pourquoi les valeurs BPM dans la file d'attente sont-elles parfois différentes du badge ou de ce qu'elles étaient avant ?",
+          faq_queue_diff_short:
+            "Le badge, la page playlist/album et les lignes de la file d'attente identifient les titres par des chemins différents. Quand ils n'ont pas encore été vus, les titres de la file peuvent se résoudre vers une version différente — par exemple un single plutôt que la version album — avec un BPM légèrement différent.",
+          faq_queue_diff_long1:
+            "Le badge identifie le titre en cours de lecture en lisant le lien album directement dans la barre du lecteur, puis en faisant correspondre le titre avec la liste de pistes de cet album. Les lignes de la file n'ont pas de lien album dans leur DOM, donc en l'absence d'entrée en cache, l'extension effectue une recherche par titre + artiste via l'API Deezer, qui peut renvoyer une autre édition du même titre.",
+          faq_queue_diff_long2:
+            "Une fois qu'un titre a été résolu, le résultat est mis en cache et réutilisé lors des visites suivantes, les valeurs se stabilisent donc avec le temps. Vider le cache de l'extension (via le stockage de l'extension dans le navigateur) réinitialise toutes les résolutions et peut provoquer temporairement cette divergence.",
+
+          faq_queue_slow_q:
+            "Pourquoi les valeurs BPM dans la file d'attente mettent-elles parfois plus longtemps à apparaître ?",
+          faq_queue_slow_short:
+            "Les lignes de la file d'attente non encore vues nécessitent un appel API de recherche supplémentaire pour identifier le titre, et ce résultat n'est pas toujours mis en cache — la même recherche peut donc se reproduire lors de la prochaine visite.",
+          faq_queue_slow_long1:
+            "Quand une ligne de la file n'a pas de lien album dans son DOM et aucune entrée en cache, l'extension interroge l'API de recherche Deezer par titre et nom d'artiste. C'est plus lent qu'une récupération directe via l'album, et les résultats ne sont mis en cache que si l'extension peut les faire correspondre avec confiance à l'image de couverture affichée dans la ligne.",
+          faq_queue_slow_long2:
+            "Les titres vus au préalable sur une page playlist ou album sont résolus par un chemin plus rapide et afficheront toujours leur BPM instantanément dans la file, car leur identifiant est déjà connu.",
+
+          faq_x_q:
+            "Pourquoi certains titres affichent-ils un ✕ au lieu d'une valeur BPM ?",
+          faq_x_short:
+            "Un ✕ signifie que l'extension n'a pas pu identifier le titre après avoir épuisé toutes les stratégies disponibles. La ligne ne sera pas retentée jusqu'au rechargement de la page.",
+          faq_x_long1:
+            "Pour afficher un BPM, l'extension doit d'abord résoudre le titre vers un identifiant Deezer. Elle essaie plusieurs stratégies dans l'ordre : une recherche rapide dans le cache par image de couverture, puis la récupération de la liste de pistes de l'album et la correspondance par titre, et enfin une recherche par titre + artiste via l'API Deezer. Un ✕ apparaît quand toutes ces tentatives échouent — par exemple si le titre dans le DOM ne correspond à rien dans l'API, si la couverture n'a pas chargé à temps, ou si l'API Deezer elle-même a renvoyé une erreur.",
+          faq_x_long2:
+            "Recharger la page résout souvent le problème, car les couvertures et métadonnées DOM peuvent être disponibles au second passage. Faire défiler le titre hors de la vue puis revenir peut aussi déclencher une nouvelle tentative de résolution. À noter que ✕ est différent de « N/A » : N/A signifie que le titre <em>a bien été</em> identifié mais que Deezer n'a simplement pas de donnée BPM pour ce titre.",
+
+          contact_title: "Contact",
+          contact_desc:
+            "Une suggestion ou un bug ? N'hésitez pas à nous contacter !",
+          contact_btn: "✉️ Envoyer un retour",
+          contact_github: "🐛 Ouvrir un ticket sur GitHub",
+          screenshot_src: "playlist_fr.jpg",
+        },
+      };
+
+      function applyTranslations(lang) {
+        const t = translations[lang];
+        if (!t) return; // fall back to HTML default (English)
+
+        document.querySelectorAll("[data-i18n]").forEach((el) => {
+          const key = el.dataset.i18n;
+          if (t[key] !== undefined) el.innerHTML = t[key];
         });
-        document.querySelectorAll('.version-tag').forEach(el => {
-          el.classList.add('visible');
+
+        document.querySelectorAll("[data-i18n-html]").forEach((el) => {
+          const key = el.dataset.i18nHtml;
+          if (t[key] !== undefined) el.innerHTML = t[key];
         });
-      } catch (e) {
-        console.error('Failed to fetch latest version', e);
+
+        if (t.screenshot_src) {
+          document.getElementById("screenshot").src = t.screenshot_src;
+          document.querySelector(".lightbox img").src = t.screenshot_src;
+        }
       }
-    }
-    fetchLatestVersion();
-  </script>
 
-  <script>
-    // ── i18n ──────────────────────────────────────────────────────────────────
-    const translations = {
-      fr: {
-        tagline: "Voir les BPM de chaque titre sur Deezer — directement dans le navigateur, sans compte requis.",
-        latest_version: "Dernière version",
-        cta_firefox: '🦊 Firefox Add-ons <span style="font-size:.8rem;opacity:.7">— Bientôt…</span>',
-        cta_chrome: "🌐 Chrome Web Store",
-
-        feat1_title: "Badge flottant",
-        feat1_desc: "Un petit badge fixé en bas à droite affiche les BPM du titre en cours de lecture, toujours visible.",
-        feat2_title: "Mode playlist",
-        feat2_desc: "Activez le mode playlist avec le bouton ≡ pour afficher les BPM à côté de chaque titre dans une playlist ou un album.",
-        feat_selection_title: 'Sélection par BPM <span style="display:inline-block;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#b45a00;background:rgba(255,160,0,.15);border:1px solid rgba(255,160,0,.35);border-radius:4px;padding:1px 6px;vertical-align:middle;line-height:1.6">Expérimental</span>',
-        feat_selection_desc: "Filtrez et sélectionnez les titres par BPM en utilisant des expressions comme <code style=\"background:rgba(162,56,255,.15);color:var(--purple-lt);padding:1px 5px;border-radius:4px;font-size:.85em\">&gt;120</code> ou <code style=\"background:rgba(162,56,255,.15);color:var(--purple-lt);padding:1px 5px;border-radius:4px;font-size:.85em\">&lt;=90</code> — les titres correspondants sont cochés automatiquement lors du défilement.",
-        feat3_title: "Instantané &amp; en cache",
-        feat3_desc: "Les valeurs BPM sont mises en cache entre les sessions pour que les titres déjà consultés s'affichent instantanément, sans nouvel appel API.",
-        feat4_title: "Aucune clé API requise",
-        feat4_desc: "Utilise l'API publique Deezer. Aucune inscription, aucune configuration — il suffit de l'installer et lancer un morceau.",
-
-        faq_title: "FAQ",
-        faq_short: "En bref",
-        faq_curious: "Pour les curieux",
-
-        faq_incorrect_q: "Certaines valeurs BPM semblent incorrectes — est-ce un bug ?",
-        faq_incorrect_short: "Si l'extension a correctement identifié le titre, la valeur BPM affichée est exactement celle que l'API Deezer indique. Une valeur qui semble erronée provient très probablement de données inexactes côté Deezer, pas d'une erreur de résolution.",
-        faq_incorrect_long1: "L'extension ne calcule pas elle-même les BPM — elle récupère la valeur directement depuis l'API publique Deezer. Lorsque le titre a été identifié avec certitude (correspondance exacte du titre dans la liste de l'album), le nombre affiché est celui enregistré par Deezer. Les données BPM de Deezer proviennent d'une analyse audio et ne sont pas toujours précises : les valeurs peuvent être divisées ou doublées, arrondies grossièrement, ou tout simplement erronées pour certains titres.",
-        faq_incorrect_long2: "Un bon exemple est <em>Alberto Balsam</em> d'Aphex Twin, que Deezer indique à environ 188 BPM. Le titre se situe en réalité autour de 94–96 BPM — l'analyseur a verrouillé sur le double du tempo réel, une erreur fréquente avec les grooves relaxés ou syncopés où le tempo peut être interprété à deux niveaux différents.",
-        faq_incorrect_long3: 'Si une valeur semble incorrecte, vérifiez-la sur une autre source comme <a href="https://www.tunebat.com" target="_blank" rel="noopener">Tunebat</a> ou <a href="https://songbpm.com" target="_blank" rel="noopener">SongBPM</a>. Si elles concordent avec Deezer, la valeur est probablement correcte. Si elles divergent systématiquement, l\'inexactitude provient des données Deezer et ne peut pas être corrigée par l\'extension.',
-
-        faq_sort_q: "Pourquoi ne peut-on pas trier la playlist par BPM ?",
-        faq_sort_short: "Les valeurs BPM sont récupérées une par une au fur et à mesure du défilement — tant que vous n'avez pas fait défiler tous les titres, l'extension n'a pas toutes les données nécessaires pour effectuer un tri. Deezer ne propose pas non plus de moyen natif pour les extensions de réordonner les titres.",
-        faq_sort_long: "Deezer utilise une liste virtualisée pour afficher les playlists : seules les lignes visibles à l'écran existent dans le DOM et sont recyclées au défilement. Cela signifie que l'extension ne peut récupérer et afficher les BPM que des titres ayant été rendus au moins une fois. Sans données complètes pour chaque titre, un tri pertinent n'est pas possible. De plus, réordonner les lignes nécessiterait de prendre le contrôle de la gestion DOM de Deezer, ce qui est fragile et risque de se briser à chaque mise à jour. Une future version pourra proposer un export des données BPM, mais le tri en place n'est pas prévu pour l'instant.",
-        
-        faq_filter_q: "Comment fonctionnent la sélection et le filtrage par BPM ?",
-        faq_filter_short: "Vous pouvez utiliser l'icône de filtre dans le badge BPM pour mettre en évidence et sélectionner automatiquement les titres correspondant à une plage de BPM spécifique. Le filtre est actif uniquement tant que le champ de saisie est déployé ; la fermeture du champ désactive la logique de filtrage et efface les mises en évidence.",
-        faq_filter_long1: "Le filtre prend en charge plusieurs expressions : <code>>120</code> (supérieur à 120), <code><=90</code> (inférieur ou égal à 90), <code>120-130</code> (entre 120 et 130), ou un simple <code>124</code> (correspondance exacte). Lorsqu'un filtre est actif, les lignes correspondant aux critères sont mises en évidence par une légère couleur de fond.",
-        faq_filter_long2: "Si vous êtes dans une vue playlist ou album, l'extension cochera également automatiquement la case de sélection de chaque titre correspondant au fur et à mesure qu'il apparaît lors du défilement. Cela facilite ensuite les actions groupées, comme « Ajouter à une playlist » ou « Ajouter à la file d'attente », en utilisant les outils natifs de Deezer. Fermer le champ de filtre (en recliquant sur l'icône) effacera les mises en évidence et désactivera le filtre, mais conservera les titres déjà sélectionnés cochés.",
-        faq_filter_long3: "<strong>Note :</strong> En raison de la manière dont l'extension interagit avec le système de cases à cocher de Deezer, vous pouvez rencontrer de légers « sauts » d'interface lors du défilement de grandes playlists avec un filtre actif. C'est un effet secondaire nécessaire pour garantir que les titres sont correctement enregistrés par le système de sélection de Deezer.",
-
-        faq_queue_diff_q: "Pourquoi les valeurs BPM dans la file d'attente sont-elles parfois différentes du badge ou de ce qu'elles étaient avant ?",
-        faq_queue_diff_short: "Le badge, la page playlist/album et les lignes de la file d'attente identifient les titres par des chemins différents. Quand ils n'ont pas encore été vus, les titres de la file peuvent se résoudre vers une version différente — par exemple un single plutôt que la version album — avec un BPM légèrement différent.",
-        faq_queue_diff_long1: "Le badge identifie le titre en cours de lecture en lisant le lien album directement dans la barre du lecteur, puis en faisant correspondre le titre avec la liste de pistes de cet album. Les lignes de la file n'ont pas de lien album dans leur DOM, donc en l'absence d'entrée en cache, l'extension effectue une recherche par titre + artiste via l'API Deezer, qui peut renvoyer une autre édition du même titre.",
-        faq_queue_diff_long2: "Une fois qu'un titre a été résolu, le résultat est mis en cache et réutilisé lors des visites suivantes, les valeurs se stabilisent donc avec le temps. Vider le cache de l'extension (via le stockage de l'extension dans le navigateur) réinitialise toutes les résolutions et peut provoquer temporairement cette divergence.",
-
-        faq_queue_slow_q: "Pourquoi les valeurs BPM dans la file d'attente mettent-elles parfois plus longtemps à apparaître ?",
-        faq_queue_slow_short: "Les lignes de la file d'attente non encore vues nécessitent un appel API de recherche supplémentaire pour identifier le titre, et ce résultat n'est pas toujours mis en cache — la même recherche peut donc se reproduire lors de la prochaine visite.",
-        faq_queue_slow_long1: "Quand une ligne de la file n'a pas de lien album dans son DOM et aucune entrée en cache, l'extension interroge l'API de recherche Deezer par titre et nom d'artiste. C'est plus lent qu'une récupération directe via l'album, et les résultats ne sont mis en cache que si l'extension peut les faire correspondre avec confiance à l'image de couverture affichée dans la ligne.",
-        faq_queue_slow_long2: "Les titres vus au préalable sur une page playlist ou album sont résolus par un chemin plus rapide et afficheront toujours leur BPM instantanément dans la file, car leur identifiant est déjà connu.",
-
-        faq_x_q: "Pourquoi certains titres affichent-ils un ✕ au lieu d'une valeur BPM ?",
-        faq_x_short: "Un ✕ signifie que l'extension n'a pas pu identifier le titre après avoir épuisé toutes les stratégies disponibles. La ligne ne sera pas retentée jusqu'au rechargement de la page.",
-        faq_x_long1: "Pour afficher un BPM, l'extension doit d'abord résoudre le titre vers un identifiant Deezer. Elle essaie plusieurs stratégies dans l'ordre : une recherche rapide dans le cache par image de couverture, puis la récupération de la liste de pistes de l'album et la correspondance par titre, et enfin une recherche par titre + artiste via l'API Deezer. Un ✕ apparaît quand toutes ces tentatives échouent — par exemple si le titre dans le DOM ne correspond à rien dans l'API, si la couverture n'a pas chargé à temps, ou si l'API Deezer elle-même a renvoyé une erreur.",
-        faq_x_long2: 'Recharger la page résout souvent le problème, car les couvertures et métadonnées DOM peuvent être disponibles au second passage. Faire défiler le titre hors de la vue puis revenir peut aussi déclencher une nouvelle tentative de résolution. À noter que ✕ est différent de « N/A » : N/A signifie que le titre <em>a bien été</em> identifié mais que Deezer n\'a simplement pas de donnée BPM pour ce titre.',
-
-        contact_title: "Contact",
-        contact_desc: "Une suggestion ou un bug ? N'hésitez pas à nous contacter !",
-        contact_btn: "✉️ Envoyer un retour",
-        contact_github: "🐛 Ouvrir un ticket sur GitHub",
-        screenshot_src: "playlist_fr.jpg",
-      }
-    };
-
-    function applyTranslations(lang) {
-      const t = translations[lang];
-      if (!t) return; // fall back to HTML default (English)
-
-      document.querySelectorAll('[data-i18n]').forEach(el => {
-        const key = el.dataset.i18n;
-        if (t[key] !== undefined) el.innerHTML = t[key];
-      });
-
-      document.querySelectorAll('[data-i18n-html]').forEach(el => {
-        const key = el.dataset.i18nHtml;
-        if (t[key] !== undefined) el.innerHTML = t[key];
-      });
-
-      if (t.screenshot_src) {
-        document.getElementById('screenshot').src = t.screenshot_src;
-        document.querySelector('.lightbox img').src = t.screenshot_src;
-      }
-    }
-
-    // Use the primary browser language, e.g. "fr-FR" → "fr"
-    const lang = (navigator.language || '').split('-')[0].toLowerCase();
-    applyTranslations(lang);
-  </script>
-
-</body>
+      // Use the primary browser language, e.g. "fr-FR" → "fr"
+      const lang = (navigator.language || "").split("-")[0].toLowerCase();
+      applyTranslations(lang);
+    </script>
+  </body>
 </html>

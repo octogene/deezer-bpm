@@ -1,104 +1,135 @@
 (function () {
-    'use strict';
+  "use strict";
 
-    window.DeezerBpm = window.DeezerBpm || {};
+  window.DeezerBpm = window.DeezerBpm || {};
 
-    const {
-        COVER_PLACEHOLDER_ID,
-        DEBUG_STORAGE_KEY,
-        LOG_PREFIX,
-        DEBUG_BADGE_STYLE,
-        ERROR_BADGE_STYLE,
-    } = window.DeezerBpm.constants;
+  const {
+    COVER_PLACEHOLDER_ID,
+    DEBUG_STORAGE_KEY,
+    LOG_PREFIX,
+    DEBUG_BADGE_STYLE,
+    ERROR_BADGE_STYLE,
+  } = window.DeezerBpm.constants;
 
-    const DEBUG = localStorage.getItem(DEBUG_STORAGE_KEY) === '1';
+  const DEBUG = localStorage.getItem(DEBUG_STORAGE_KEY) === "1";
 
-    function normalizeTrackKeyPart(value) {
-        return String(value)
-            .trim()
-            .replace(/^\d+\.\s+/, '')
-            .toLowerCase()
-            .replace(/\s+/g, ' ')
-            .replace(/[’']/g, "'")
-            .normalize('NFKD')
-            .replace(/[\u0300-\u036f]/g, '');
+  function normalizeTrackKeyPart(value) {
+    return String(value)
+      .trim()
+      .replace(/^\d+\.\s+/, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .replace(/[’']/g, "'")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "");
+  }
+
+  function makeCoverTrackKey(coverId, title) {
+    return `${coverId}\0${normalizeTrackKeyPart(title)}`;
+  }
+
+  function makeAlbumTrackKey(albumId, title) {
+    return `album:${albumId}\0${normalizeTrackKeyPart(title)}`;
+  }
+
+  function extractCoverId(element, coverTestId = "cover") {
+    const coverImg = element.querySelector(
+      `[data-testid="${coverTestId}"] img`,
+    );
+    const coverMatch = coverImg
+      ?.getAttribute("src")
+      ?.match(/\/images\/cover\/([a-f0-9]+)\//);
+    const coverId = coverMatch ? coverMatch[1] : null;
+    return coverId !== COVER_PLACEHOLDER_ID ? coverId : null;
+  }
+
+  function logDebugInfo(...args) {
+    if (!DEBUG) return;
+    console.log(`%c${LOG_PREFIX}`, DEBUG_BADGE_STYLE, ...args);
+  }
+
+  function logDebugError(...args) {
+    if (!DEBUG) return;
+    console.error(`%c${LOG_PREFIX}`, ERROR_BADGE_STYLE, ...args);
+  }
+
+  function clearUnresolvableTrackCache() {
+    const { UNRESOLVABLE } = window.DeezerBpm.constants;
+    const { trackResolutionCache, scheduleSaveCache } = window.DeezerBpm.cache;
+
+    let removed = 0;
+
+    for (const [key, value] of trackResolutionCache.entries()) {
+      if (value === UNRESOLVABLE) {
+        trackResolutionCache.delete(key);
+        removed += 1;
+      }
     }
 
-    function makeCoverTrackKey(coverId, title) {
-        return `${coverId}\0${normalizeTrackKeyPart(title)}`;
+    if (removed > 0) {
+      scheduleSaveCache();
     }
 
-    function makeAlbumTrackKey(albumId, title) {
-        return `album:${albumId}\0${normalizeTrackKeyPart(title)}`;
+    logDebugInfo("[CACHE] Cleared unresolvable track cache entries:", removed);
+    return removed;
+  }
+
+  function delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  function parseBpmFilter(str) {
+    if (!str || !str.trim()) return null;
+
+    const input = str.trim();
+
+    // 1. Range: "90-110"
+    const rangeMatch = input.match(/^(\d+)-(\d+)$/);
+    if (rangeMatch) {
+      const min = parseInt(rangeMatch[1], 10);
+      const max = parseInt(rangeMatch[2], 10);
+      return (bpm) => bpm >= min && bpm <= max;
     }
 
-    function extractCoverId(element, coverTestId = 'cover') {
-        const coverImg = element.querySelector(`[data-testid="${coverTestId}"] img`);
-        const coverMatch = coverImg?.getAttribute('src')?.match(/\/images\/cover\/([a-f0-9]+)\//);
-        const coverId = coverMatch ? coverMatch[1] : null;
-        return coverId !== COVER_PLACEHOLDER_ID ? coverId : null;
+    // 2. Inequality: ">100", "<120", ">=90", "<=130", "==120"
+    const opMatch = input.match(/^(>|<|>=|<=|==)\s*(\d+)$/);
+    if (opMatch) {
+      const op = opMatch[1];
+      const val = parseInt(opMatch[2], 10);
+      switch (op) {
+        case ">":
+          return (bpm) => bpm > val;
+        case "<":
+          return (bpm) => bpm < val;
+        case ">=":
+          return (bpm) => bpm >= val;
+        case "<=":
+          return (bpm) => bpm <= val;
+        case "==":
+          return (bpm) => bpm === val;
+      }
     }
 
-    function logDebugInfo(...args) {
-        if (!DEBUG) return;
-        console.log(`%c${LOG_PREFIX}`, DEBUG_BADGE_STYLE, ...args);
+    // 3. Simple number: "120"
+    const numMatch = input.match(/^(\d+)$/);
+    if (numMatch) {
+      const val = parseInt(numMatch[1], 10);
+      return (bpm) => bpm === val;
     }
 
-    function logDebugError(...args) {
-        if (!DEBUG) return;
-        console.error(`%c${LOG_PREFIX}`, ERROR_BADGE_STYLE, ...args);
-    }
+    return null;
+  }
 
-    function delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
-    }
-
-    function parseBpmFilter(str) {
-        if (!str || !str.trim()) return null;
-
-        const input = str.trim();
-
-        // 1. Range: "90-110"
-        const rangeMatch = input.match(/^(\d+)-(\d+)$/);
-        if (rangeMatch) {
-            const min = parseInt(rangeMatch[1], 10);
-            const max = parseInt(rangeMatch[2], 10);
-            return bpm => bpm >= min && bpm <= max;
-        }
-
-        // 2. Inequality: ">100", "<120", ">=90", "<=130", "==120"
-        const opMatch = input.match(/^(>|<|>=|<=|==)\s*(\d+)$/);
-        if (opMatch) {
-            const op = opMatch[1];
-            const val = parseInt(opMatch[2], 10);
-            switch (op) {
-                case '>':  return bpm => bpm > val;
-                case '<':  return bpm => bpm < val;
-                case '>=': return bpm => bpm >= val;
-                case '<=': return bpm => bpm <= val;
-                case '==': return bpm => bpm === val;
-            }
-        }
-
-        // 3. Simple number: "120"
-        const numMatch = input.match(/^(\d+)$/);
-        if (numMatch) {
-            const val = parseInt(numMatch[1], 10);
-            return bpm => bpm === val;
-        }
-
-        return null;
-    }
-
-    window.DeezerBpm.utils = {
-        normalizeTrackKeyPart,
-        makeCoverTrackKey,
-        makeAlbumTrackKey,
-        extractCoverId,
-        logDebugInfo,
-        logDebugError,
-        delay,
-        parseBpmFilter,
-        DEBUG,
-    };
+  window.DeezerBpm.utils = {
+    normalizeTrackKeyPart,
+    makeCoverTrackKey,
+    makeAlbumTrackKey,
+    extractCoverId,
+    logDebugInfo,
+    logDebugError,
+    clearUnresolvableTrackCache,
+    delay,
+    parseBpmFilter,
+    DEBUG,
+  };
 })();
