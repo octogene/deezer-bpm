@@ -3,17 +3,13 @@
 
   window.DeezerBpm = window.DeezerBpm || {};
 
-  const {
-    PLAYLIST_RESCAN_INTERVAL_MS,
-    INLINE_CLASS,
-    HEADER_CLASS,
-    BADGE_ID,
-  } = window.DeezerBpm.constants;
+  const { PLAYLIST_RESCAN_INTERVAL_MS, INLINE_CLASS, HEADER_CLASS, BADGE_ID } =
+    window.DeezerBpm.constants;
 
   const { logDebugInfo } = window.DeezerBpm.utils;
 
   const { getTrackListContainer, applyFilterToVisibleRows } =
-      window.DeezerBpm.playlist;
+    window.DeezerBpm.playlist;
 
   let playlistObserver = null;
   let playlistContainerObserver = null;
@@ -39,12 +35,12 @@
     if (!(node instanceof Element)) return false;
 
     return (
-        node.id === BADGE_ID ||
-        node.classList.contains(INLINE_CLASS) ||
-        node.classList.contains(HEADER_CLASS) ||
-        node.closest(`#${BADGE_ID}`) !== null ||
-        node.closest(`.${INLINE_CLASS}`) !== null ||
-        node.closest(`.${HEADER_CLASS}`) !== null
+      node.id === BADGE_ID ||
+      node.classList.contains(INLINE_CLASS) ||
+      node.classList.contains(HEADER_CLASS) ||
+      node.closest(`#${BADGE_ID}`) !== null ||
+      node.closest(`.${INLINE_CLASS}`) !== null ||
+      node.closest(`.${HEADER_CLASS}`) !== null
     );
   }
 
@@ -53,12 +49,12 @@
       if (mutation.type !== "childList") return true;
 
       const addedRelevant = [...mutation.addedNodes].some(
-          (node) => !isDbpmNode(node),
+        (node) => !isDbpmNode(node),
       );
       if (addedRelevant) return true;
 
       const removedRelevant = [...mutation.removedNodes].some(
-          (node) => !isDbpmNode(node),
+        (node) => !isDbpmNode(node),
       );
       return removedRelevant;
     });
@@ -71,8 +67,8 @@
     const queueContainer = document.querySelector(".player-queuelist");
 
     if (
-        catalog === observedCatalog &&
-        queueContainer === observedQueueContainer
+      catalog === observedCatalog &&
+      queueContainer === observedQueueContainer
     )
       return;
 
@@ -154,16 +150,16 @@
 
       new MutationObserver(() => {
         const anchor = miniplayerEl.querySelector(
-            '[data-testid="item_title"] a[href*="/album/"]',
+          '[data-testid="item_title"] a[href*="/album/"]',
         );
         const title = anchor?.textContent ?? null;
         if (title === lastPlayerTitle) return;
 
         logDebugInfo(
-            "[MINIPLAYER] title changed",
-            lastPlayerTitle,
-            "->",
-            title,
+          "[MINIPLAYER] title changed",
+          lastPlayerTitle,
+          "->",
+          title,
         );
         lastPlayerTitle = title;
 
@@ -181,7 +177,7 @@
     };
 
     const miniplayerEl = document.querySelector(
-        '[data-testid="miniplayer_container"]',
+      '[data-testid="miniplayer_container"]',
     );
     if (miniplayerEl) {
       attachObserver(miniplayerEl);
@@ -243,14 +239,14 @@
 
   function setupToggleListener(callback) {
     document.addEventListener(
-        "mousedown",
-        (event) => {
-          if (event.target.closest(".dbpm-list-btn")) {
-            event.stopPropagation();
-            callback();
-          }
-        },
-        true,
+      "mousedown",
+      (event) => {
+        if (event.target.closest(".dbpm-list-btn")) {
+          event.stopPropagation();
+          callback();
+        }
+      },
+      true,
     );
   }
 
