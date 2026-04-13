@@ -34,6 +34,7 @@
     } = window.DeezerBpm.api;
 
     let activeBpmFilterPredicate = null;
+    let filterApplyScheduled = false;
 
     function findDurationCell(row) {
         let element = row.querySelector('[data-testid="duration"]');
@@ -73,9 +74,6 @@
                 toggleRowCheckbox(row, matches);
             } else if (row) {
                 row.classList.remove(FILTER_MATCH_CLASS);
-                // We don't necessarily unselect if the filter is cleared?
-                // Actually the user probably wants them unselected if they no longer match.
-                // But if the filter is cleared (null), we probably shouldn't touch checkboxes.
             }
         };
     }
@@ -296,18 +294,26 @@
         });
     }
 
+    function scheduleApplyFilter() {
+        if (filterApplyScheduled) return;
+
+        filterApplyScheduled = true;
+        queueMicrotask(() => {
+            filterApplyScheduled = false;
+            applyFilterToVisibleRows();
+        });
+    }
+
     function toggleRowCheckbox(row, shouldSelect) {
         const button = row.querySelector('[data-testid="select_button"]');
         const checkbox = button?.querySelector('input[type="checkbox"]');
         if (!button || !checkbox) return;
 
-        // In Deezer's UI, the [aria-checked] attribute is usually on the button or a wrapper
         const isChecked = button.getAttribute('aria-checked') === 'true' ||
-                          checkbox.closest('[aria-checked="true"]') !== null ||
-                          checkbox.checked;
+            checkbox.closest('[aria-checked="true"]') !== null ||
+            checkbox.checked;
 
         if (shouldSelect !== isChecked) {
-            // Snapshot scrolls to avoid jumps (Chakra UI / Deezer sometimes scrolls on focus/click)
             const snapshots = [];
             let el = button.parentElement;
             while (el) {
@@ -326,7 +332,6 @@
 
             button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 
-            // Attempt to restore scroll positions immediately and slightly after
             restore();
             Promise.resolve().then(restore);
             setTimeout(restore, 0);
@@ -339,7 +344,7 @@
             logDebugInfo('[PLAYLIST] Filter changed event received:', filterStr);
             activeBpmFilterPredicate = parseBpmFilter(filterStr);
             syncFilterButton(!!activeBpmFilterPredicate);
-            applyFilterToVisibleRows();
+            scheduleApplyFilter();
         });
     }
 
@@ -355,6 +360,7 @@
         injectQueueBpms,
         removePlaylistBpms,
         applyFilterToVisibleRows,
+        scheduleApplyFilter,
         initPlaylistFilter,
     };
 })();

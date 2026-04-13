@@ -4,7 +4,7 @@
     window.DeezerBpm = window.DeezerBpm || {};
 
     const {
-        STORAGE_KEY,
+        PLAYLIST_MODE_KEY,
     } = window.DeezerBpm.constants;
 
     const {
@@ -30,7 +30,7 @@
         injectQueueBpms,
         removePlaylistBpms,
         initPlaylistFilter,
-        applyFilterToVisibleRows,
+        scheduleApplyFilter,
     } = window.DeezerBpm.playlist;
 
     const {
@@ -48,6 +48,9 @@
     let currentPageUrl = null;
     let isLoadingTrackIds = false;
     let isTrackPage = false;
+    let playlistRefreshTimer = null;
+    let playlistRefreshRunning = false;
+    let playlistRefreshQueued = false;
 
     async function injectPlaylistBpms() {
         if (isLoadingTrackIds) return;
@@ -68,7 +71,7 @@
 
             if (location.pathname !== targetUrl) {
                 currentPageUrl = null;
-                setTimeout(injectPlaylistBpms, 100);
+                schedulePlaylistRefresh(100);
                 return;
             }
         }
@@ -80,11 +83,11 @@
 
     function setPlaylistMode(enabled) {
         playlistModeEnabled = enabled;
-        localStorage.setItem(STORAGE_KEY, enabled ? '1' : '0');
+        localStorage.setItem(PLAYLIST_MODE_KEY, enabled ? '1' : '0');
         syncPlaylistModeButton(enabled);
 
         if (enabled) {
-            injectPlaylistBpms();
+            schedulePlaylistRefresh(0);
             startPlaylistObserver({
                 onQueueMutation: refreshQueueBpms,
                 onPlaylistMutation: handleObservedPlaylistMutation,
@@ -113,18 +116,59 @@
         injectQueueBpms(resolveRowTrackId);
     }
 
+    function schedulePlaylistRefresh(delay = 0) {
+        if (playlistRefreshRunning) {
+            playlistRefreshQueued = true;
+            return;
+        }
+
+        clearTimeout(playlistRefreshTimer);
+        playlistRefreshTimer = setTimeout(() => {
+            playlistRefreshTimer = null;
+            runPlaylistRefresh();
+        }, delay);
+    }
+
+    async function runPlaylistRefresh() {
+        if (!playlistModeEnabled) return;
+
+        if (playlistRefreshRunning) {
+            playlistRefreshQueued = true;
+            return;
+        }
+
+        playlistRefreshRunning = true;
+
+        try {
+            await injectPlaylistBpms();
+            refreshQueueBpms();
+            scheduleApplyFilter();
+        } finally {
+            playlistRefreshRunning = false;
+
+            if (playlistRefreshQueued) {
+                playlistRefreshQueued = false;
+                schedulePlaylistRefresh(0);
+            }
+        }
+    }
+
     function handleObservedPlaylistMutation() {
         if (currentPageUrl !== location.pathname) {
-            injectPlaylistBpms();
-        } else {
+            schedulePlaylistRefresh(0);
+            return;
+        }
+
+        if (isTrackPage) {
             refreshPlaylistPlaceholders();
         }
-        // Re-apply filter on any observed change
-        applyFilterToVisibleRows();
+
+        scheduleApplyFilter();
     }
 
     function handleUrlChange() {
         schedulePlayerBadgeUpdate();
+        schedulePlaylistRefresh(150);
     }
 
     function handleMiniplayerTitleChange() {
@@ -137,12 +181,7 @@
 
     function handlePlaylistRescan() {
         if (!playlistModeEnabled || isLoadingTrackIds) return;
-
-        if (currentPageUrl !== location.pathname) {
-            injectPlaylistBpms();
-        } else if (isTrackPage) {
-            refreshPlaylistPlaceholders();
-        }
+        schedulePlaylistRefresh(0);
     }
 
     setupMiniplayerObserver({
@@ -163,7 +202,7 @@
     });
 
     checkCacheClear().then(loadPersistedCache).then(() => {
-        playlistModeEnabled = localStorage.getItem(STORAGE_KEY) === '1';
+        playlistModeEnabled = localStorage.getItem(PLAYLIST_MODE_KEY) === '1';
         initBadge({ playlistModeEnabled });
         initPlaylistFilter();
 

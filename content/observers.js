@@ -24,6 +24,17 @@
     let urlChangeTimer = null;
     let playlistRescanIntervalId = null;
     let miniplayerReadyObserver = null;
+    let filterApplyScheduled = false;
+
+    function scheduleApplyFilter() {
+        if (filterApplyScheduled) return;
+        filterApplyScheduled = true;
+
+        queueMicrotask(() => {
+            filterApplyScheduled = false;
+            applyFilterToVisibleRows();
+        });
+    }
 
     function refreshObservedContainers() {
         if (!playlistObserver) return;
@@ -59,7 +70,7 @@
                     onPlaylistMutation();
                 }
 
-                applyFilterToVisibleRows();
+                scheduleApplyFilter();
             });
         }
 

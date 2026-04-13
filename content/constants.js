@@ -19,7 +19,7 @@
         FILTER_APPLY_CLASS: 'dbpm-filter-apply',
 
         // Local storage keys
-        STORAGE_KEY: 'deezerBpmPlaylistMode',
+        PLAYLIST_MODE_KEY: 'deezerBpmPlaylistMode',
         CLEAR_CACHE_STORAGE_KEY: 'deezerBpmCacheClear',
 
         // Extension storage keys
