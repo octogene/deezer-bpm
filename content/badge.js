@@ -26,35 +26,77 @@
   let badgeUpdateQueued = false;
   let badgeObserverStarted = false;
 
+  function createBadgeContent(badge) {
+    const svgNs = "http://www.w3.org/2000/svg";
+
+    const filterWidget = document.createElement("div");
+    filterWidget.className = FILTER_WIDGET_CLASS;
+
+    const filterButton = document.createElement("button");
+    filterButton.className = FILTER_BTN_CLASS;
+    filterButton.title = "Select tracks by BPM filter";
+
+    const filterIcon = document.createElementNS(svgNs, "svg");
+    filterIcon.setAttribute("viewBox", "0 0 24 24");
+    filterIcon.setAttribute("width", "14");
+    filterIcon.setAttribute("height", "14");
+    filterIcon.setAttribute("focusable", "false");
+    filterIcon.setAttribute("class", "chakra-icon");
+    filterIcon.setAttribute("aria-hidden", "true");
+
+    const filterPath = document.createElementNS(svgNs, "path");
+    filterPath.setAttribute(
+      "d",
+      "M10.947 5.35c3.725 0 5.614 1.89 5.614 5.614 0 1.513-.326 2.745-.967 3.661l-.392.477-.398.374c-.925.731-2.223 1.102-3.857 1.102-3.725 0-5.614-1.889-5.614-5.614 0-3.725 1.889-5.613 5.614-5.613Zm0-1.332C6.486 4.018 4 6.503 4 10.964s2.486 6.947 6.947 6.947c1.955 0 3.53-.478 4.684-1.39l3.243 3.462L20 18.927l-3.315-3.537c.79-1.127 1.209-2.61 1.209-4.426 0-4.46-2.486-6.946-6.947-6.946Z",
+    );
+    filterIcon.appendChild(filterPath);
+    filterButton.appendChild(filterIcon);
+
+    const filterInput = document.createElement("input");
+    filterInput.className = FILTER_INPUT_CLASS;
+    filterInput.type = "text";
+    filterInput.placeholder = ">100";
+
+    const filterApply = document.createElement("button");
+    filterApply.className = FILTER_APPLY_CLASS;
+    filterApply.title = "Apply filter";
+    filterApply.textContent = "✓";
+
+    filterWidget.appendChild(filterButton);
+    filterWidget.appendChild(filterInput);
+    filterWidget.appendChild(filterApply);
+
+    const disc = document.createElement("div");
+    disc.className = "dbpm-disc";
+
+    const label = document.createElement("span");
+    label.className = "dbpm-label";
+    label.textContent = "BPM";
+
+    const value = document.createElement("span");
+    value.className = "dbpm-value";
+    value.textContent = "–";
+
+    const listButton = document.createElement("button");
+    listButton.className = "dbpm-list-btn";
+    listButton.title = "Show BPM in playlist";
+    listButton.textContent = "≡";
+
+    disc.appendChild(label);
+    disc.appendChild(value);
+    disc.appendChild(listButton);
+
+    badge.appendChild(filterWidget);
+    badge.appendChild(disc);
+  }
+
   function getBadge() {
     let badge = document.getElementById(BADGE_ID);
 
     if (!badge) {
       badge = document.createElement("div");
       badge.id = BADGE_ID;
-      badge.innerHTML =
-        '<div class="' +
-        FILTER_WIDGET_CLASS +
-        '">' +
-        '<button class="' +
-        FILTER_BTN_CLASS +
-        '" title="Select tracks by BPM filter">' +
-        '<svg viewBox="0 0 24 24" width="14" height="14" focusable="false" class="chakra-icon css-ob9m0y" aria-hidden="true">' +
-        '<path d="M10.947 5.35c3.725 0 5.614 1.89 5.614 5.614 0 1.513-.326 2.745-.967 3.661l-.392.477-.398.374c-.925.731-2.223 1.102-3.857 1.102-3.725 0-5.614-1.889-5.614-5.614 0-3.725 1.889-5.613 5.614-5.613Zm0-1.332C6.486 4.018 4 6.503 4 10.964s2.486 6.947 6.947 6.947c1.955 0 3.53-.478 4.684-1.39l3.243 3.462L20 18.927l-3.315-3.537c.79-1.127 1.209-2.61 1.209-4.426 0-4.46-2.486-6.946-6.947-6.946Z"/>' +
-        "</svg>" +
-        "</button>" +
-        '<input class="' +
-        FILTER_INPUT_CLASS +
-        '" type="text" placeholder="&gt;100" />' +
-        '<button class="' +
-        FILTER_APPLY_CLASS +
-        '" title="Apply filter">✓</button>' +
-        "</div>" +
-        '<div class="dbpm-disc">' +
-        '<span class="dbpm-label">BPM</span>' +
-        '<span class="dbpm-value">–</span>' +
-        '<button class="dbpm-list-btn" title="Show BPM in playlist">≡</button>' +
-        "</div>";
+      createBadgeContent(badge);
 
       document.body.appendChild(badge);
       attachBadgeEvents(badge);
@@ -109,7 +151,6 @@
         e.preventDefault();
         e.stopPropagation();
         applyFilterFromInput();
-        return;
       }
     });
 
@@ -134,7 +175,6 @@
   function applyFilterWithValue(value) {
     logDebugInfo("[BADGE] Applying filter with value:", value);
 
-    // Dispatch custom event that playlist.js will listen to
     window.dispatchEvent(
       new CustomEvent("dbpm:filter-changed", {
         detail: { filter: value },
