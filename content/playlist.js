@@ -55,28 +55,41 @@
     return makeCoverTrackKey(coverId, title);
   }
 
+  function getRowFilterMatch(bpm) {
+    if (!activeBpmFilterPredicate || bpm === undefined || bpm === null) {
+      return null;
+    }
+
+    const bpmNum = Number(bpm);
+    return !isNaN(bpmNum) && activeBpmFilterPredicate(bpmNum);
+  }
+
+  function updateRowFilterState(row, bpm) {
+    if (!row) return;
+
+    const matches = getRowFilterMatch(bpm);
+    row.classList.toggle(FILTER_MATCH_CLASS, !!matches);
+
+    if (matches !== null) {
+      toggleRowCheckbox(row, matches);
+    }
+  }
+
   function renderBpmValue(span, trackId, row = null) {
     return (bpm) => {
       if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
+
       span.textContent = bpm !== null ? String(bpm) : "N/A";
       span.classList.toggle(`${INLINE_CLASS}--loaded`, bpm !== null);
       span.classList.toggle(`${INLINE_CLASS}--unknown`, bpm === null);
 
-      if (row && activeBpmFilterPredicate && bpm !== null) {
-        const bpmNum = Number(bpm);
-        const matches = !isNaN(bpmNum) && activeBpmFilterPredicate(bpmNum);
-        row.classList.toggle(FILTER_MATCH_CLASS, matches);
-        toggleRowCheckbox(row, matches);
-      } else if (row) {
-        row.classList.remove(FILTER_MATCH_CLASS);
-      }
+      updateRowFilterState(row, bpm);
     };
   }
 
-  function createBpmSpan(row, { rowKey = null } = {}) {
+  function createBpmSpan(row) {
     const span = document.createElement("span");
     span.className = INLINE_CLASS;
-    if (rowKey !== null) span.dataset.dbpmRowKey = rowKey;
     span.textContent = "…";
 
     const durationCell = findDurationCell(row);
@@ -89,95 +102,92 @@
     return span;
   }
 
+  function resetInjectedRow(row, span = null) {
+    row.removeAttribute(INJECTED_ATTR);
+    row.removeAttribute(ROW_KEY_ATTR);
+    span?.remove();
+  }
+
+  function reuseCachedRowBpm(row, rowKey) {
+    const span = row.querySelector(`.${INLINE_CLASS}`);
+    if (!span) return false;
+
+    const trackId = trackResolutionCache.get(rowKey);
+    if (!trackId) return false;
+
+    const bpm = bpmCache.get(trackId);
+    if (bpm === undefined) return false;
+
+    span.dataset.dbpmTrack = trackId;
+    row.setAttribute(ROW_KEY_ATTR, rowKey);
+    renderBpmValue(span, trackId, row)(bpm);
+    return true;
+  }
+
   function injectBpmsIntoRows(
     container,
     resolveTrackId,
-    { rowFilter = null, eagerSpan = false } = {},
+    { rowFilter = null } = {},
   ) {
     for (const row of container.querySelectorAll(
       '[role="row"][aria-rowindex]',
     )) {
-      const injectedAttr = row.getAttribute(INJECTED_ATTR);
+      if (rowFilter && !rowFilter(row)) continue;
 
+      const injectedAttr = row.getAttribute(INJECTED_ATTR);
       if (injectedAttr === "pending") continue;
 
+      const rowKey = getRowKey(row);
+
       if (injectedAttr === "1") {
-        const currentKey = getRowKey(row);
+        if (row.getAttribute(ROW_KEY_ATTR) === rowKey) continue;
+        if (reuseCachedRowBpm(row, rowKey)) continue;
 
-        if (row.getAttribute(ROW_KEY_ATTR) === currentKey) continue;
-        if (rowFilter && !rowFilter(row)) continue;
-
-        const existing = row.querySelector(`.${INLINE_CLASS}`);
-        if (existing) {
-          const newTrackId = trackResolutionCache.get(currentKey);
-          if (newTrackId) {
-            const bpm = bpmCache.get(newTrackId);
-            if (bpm !== undefined) {
-              existing.dataset.dbpmRowKey = currentKey;
-              existing.dataset.dbpmTrack = newTrackId;
-              row.setAttribute(ROW_KEY_ATTR, currentKey);
-              renderBpmValue(existing, newTrackId, row)(bpm);
-              continue;
-            }
-          }
-
-          existing.remove();
-        }
-
+        row.querySelector(`.${INLINE_CLASS}`)?.remove();
         row.removeAttribute(INJECTED_ATTR);
         row.removeAttribute(ROW_KEY_ATTR);
       }
 
-      if (rowFilter && !rowFilter(row)) continue;
-
       row.setAttribute(INJECTED_ATTR, "pending");
 
-      const pendingRowKey = getRowKey(row);
-      const span = eagerSpan ? createBpmSpan(row) : null;
+      const span = createBpmSpan(row);
 
       resolveTrackId(row).then((trackId) => {
         if (!row.isConnected) {
-          row.removeAttribute(INJECTED_ATTR);
-          row.removeAttribute(ROW_KEY_ATTR);
-          span?.remove();
-          return;
-        }
-
-        if (trackId === null) {
-          row.setAttribute(INJECTED_ATTR, "1");
-          if (span) span.textContent = "–";
+          resetInjectedRow(row, span);
           return;
         }
 
         if (row.getAttribute(INJECTED_ATTR) !== "pending") {
-          span?.remove();
+          span.remove();
           return;
         }
 
         row.setAttribute(INJECTED_ATTR, "1");
-        row.setAttribute(ROW_KEY_ATTR, pendingRowKey);
+
+        if (trackId === null) {
+          span.textContent = "–";
+          return;
+        }
+
+        row.setAttribute(ROW_KEY_ATTR, rowKey);
 
         if (trackId === UNRESOLVABLE) {
-          if (span) {
-            span.dataset.dbpmRowKey = pendingRowKey;
-            span.textContent = "✕";
-          }
+          span.textContent = "✕";
           row.classList.remove(FILTER_MATCH_CLASS);
           return;
         }
 
-        const bpmSpan = span ?? createBpmSpan(row, { rowKey: pendingRowKey });
-        if (span) span.dataset.dbpmRowKey = pendingRowKey;
-        bpmSpan.dataset.dbpmTrack = trackId;
+        span.dataset.dbpmTrack = trackId;
 
         fetchBpmCached(trackId)
-          .then(renderBpmValue(bpmSpan, trackId, row))
+          .then(renderBpmValue(span, trackId, row))
           .catch((error) => {
             console.warn("[Deezer BPM] fetch error for track", trackId, error);
-            if (bpmSpan.isConnected) {
-              bpmSpan.textContent = "N/A";
-              row.classList.remove(FILTER_MATCH_CLASS);
-            }
+            if (!span.isConnected) return;
+
+            span.textContent = "N/A";
+            row.classList.remove(FILTER_MATCH_CLASS);
           });
       });
     }
@@ -236,7 +246,6 @@
     injectColumnHeader(catalog);
 
     injectBpmsIntoRows(catalog, (row) => resolveRowTrackId(row), {
-      eagerSpan: true,
       rowFilter: (row) =>
         !row.closest(".player-queuelist") &&
         !!row.querySelector('[data-testid="title"]') &&
@@ -249,10 +258,8 @@
     const queueContainer = document.querySelector(".player-queuelist");
     if (!queueContainer) return;
 
-    injectBpmsIntoRows(
-      queueContainer,
-      (row) => resolveRowTrackId(row, { allowSearchFallback: true }),
-      { eagerSpan: true },
+    injectBpmsIntoRows(queueContainer, (row) =>
+      resolveRowTrackId(row, { allowSearchFallback: true }),
     );
   }
 
@@ -263,6 +270,7 @@
     catalog
       .querySelectorAll(`.${INLINE_CLASS}, .${HEADER_CLASS}`)
       .forEach((element) => element.remove());
+
     catalog.querySelectorAll(`[${INJECTED_ATTR}]`).forEach((element) => {
       element.removeAttribute(INJECTED_ATTR);
       element.removeAttribute(ROW_KEY_ATTR);
@@ -280,30 +288,15 @@
         '.player-queuelist [role="row"][aria-rowindex]',
       ),
     ];
-    const allRows = [...rows, ...queueRows];
 
-    allRows.forEach((row) => {
-      const span = row.querySelector(`.${INLINE_CLASS}`);
-      if (!span) {
-        row.classList.remove(FILTER_MATCH_CLASS);
-        return;
-      }
-
-      const trackId = span.dataset.dbpmTrack;
-      if (!trackId || trackId === UNRESOLVABLE) {
-        row.classList.remove(FILTER_MATCH_CLASS);
-        return;
-      }
-
-      const bpm = bpmCache.get(trackId);
-      if (activeBpmFilterPredicate && bpm !== undefined && bpm !== null) {
-        const bpmNum = Number(bpm);
-        const matches = !isNaN(bpmNum) && activeBpmFilterPredicate(bpmNum);
-        row.classList.toggle(FILTER_MATCH_CLASS, matches);
-        toggleRowCheckbox(row, matches);
-      } else {
-        row.classList.remove(FILTER_MATCH_CLASS);
-      }
+    [...rows, ...queueRows].forEach((row) => {
+      const trackId = row.querySelector(`.${INLINE_CLASS}`)?.dataset.dbpmTrack;
+      updateRowFilterState(
+        row,
+        !trackId || trackId === UNRESOLVABLE
+          ? undefined
+          : bpmCache.get(trackId),
+      );
     });
   }
 

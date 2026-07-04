@@ -100,12 +100,7 @@
       );
 
       const albumData = await fetchAlbumCached(albumId);
-      const match = (albumData.tracks || []).find(
-        (track) =>
-          normalizeTrackKeyPart(track.title) ===
-          normalizeTrackKeyPart(rawTitle),
-      );
-
+      const match = findTrackMatch(albumData.tracks || [], rawTitle);
       const trackId = match ? String(match.id) : UNRESOLVABLE;
 
       if (key) trackResolutionCache.set(key, trackId);
@@ -176,7 +171,7 @@
 
         const albumData = albumCache.get(cachedAlbumId);
         if (albumData) {
-          const match = findTrackMatch(albumData.tracks, rawTitle);
+          const match = findTrackMatch(albumData.tracks || [], rawTitle);
           const trackId = match ? String(match.id) : UNRESOLVABLE;
 
           trackResolutionCache.set(key, trackId);
@@ -184,30 +179,12 @@
 
           if (trackId !== UNRESOLVABLE) {
             logDebugInfo("[ROW RES]", "Track cache hit:", key);
-            return trackId;
           }
 
-          console.warn(
-            "[Deezer BPM] [ROW RES] Track not found in cached album data",
-            {
-              rawTitle,
-              normalizedTitle: normalizeTrackKeyPart(rawTitle),
-              albumId: albumData.id,
-              albumTitle: albumData.title,
-              candidates: (albumData.tracks || [])
-                .slice(0, 10)
-                .map((track) => ({
-                  id: track.id,
-                  title: track.title,
-                  normalizedTitle: normalizeTrackKeyPart(track.title),
-                })),
-            },
-          );
-
-          return UNRESOLVABLE;
-        } else {
-          logDebugInfo("[ROW RES]", "Album-cover cache miss:", key);
+          return trackId;
         }
+
+        logDebugInfo("[ROW RES]", "Album-cover cache miss:", key);
       }
     } else {
       logDebugInfo("[ROW RES]", "No cover ID found");
@@ -224,33 +201,11 @@
         logDebugInfo("[ROW RES]", "Fetching album data for ID:", albumId);
 
         const albumData = await fetchAlbumCached(albumId);
-        const match = (albumData.tracks || []).find(
-          (track) =>
-            normalizeTrackKeyPart(track.title) ===
-            normalizeTrackKeyPart(rawTitle),
-        );
-
+        const match = findTrackMatch(albumData.tracks || [], rawTitle);
         const trackId = match ? String(match.id) : UNRESOLVABLE;
 
         if (trackId !== UNRESOLVABLE) {
           logDebugInfo("[ROW RES]", "Track ID found:", trackId);
-        } else {
-          console.warn(
-            "[Deezer BPM] [ROW RES] Track ID not found in album data",
-            {
-              rawTitle,
-              normalizedTitle: normalizeTrackKeyPart(rawTitle),
-              albumId: albumData.id,
-              albumTitle: albumData.title,
-              candidates: (albumData.tracks || [])
-                .slice(0, 10)
-                .map((track) => ({
-                  id: track.id,
-                  title: track.title,
-                  normalizedTitle: normalizeTrackKeyPart(track.title),
-                })),
-            },
-          );
         }
 
         if (albumData.coverId) {

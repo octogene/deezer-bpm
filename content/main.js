@@ -59,13 +59,8 @@
       const targetUrl = location.pathname;
       isLoadingTrackIds = true;
       currentPageUrl = targetUrl;
-      isTrackPage = false;
-
-      try {
-        isTrackPage = detectPageType();
-      } finally {
-        isLoadingTrackIds = false;
-      }
+      isTrackPage = detectPageType();
+      isLoadingTrackIds = false;
 
       if (location.pathname !== targetUrl) {
         currentPageUrl = null;
