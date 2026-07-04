@@ -22,7 +22,8 @@
 
   const { syncFilterButton } = window.DeezerBpm.badge;
 
-  const { bpmCache, trackResolutionCache } = window.DeezerBpm.cache;
+  const { bpmCache, trackResolutionCache, scheduleSaveCache } =
+    window.DeezerBpm.cache;
 
   const { fetchBpmCached } = window.DeezerBpm.api;
 
@@ -75,6 +76,67 @@
     }
   }
 
+  function attachManualBpmEntry(span, trackId, row) {
+    if (span.dataset.dbpmManualAttached) return;
+    span.dataset.dbpmManualAttached = "1";
+    span.title = "Double-click to enter BPM";
+
+    span.addEventListener("dblclick", (e) => {
+      e.stopPropagation();
+      if (!span.classList.contains(`${INLINE_CLASS}--unknown`)) return;
+
+      const input = document.createElement("input");
+      input.type = "number";
+      input.min = "1";
+      input.max = "999";
+      input.style.cssText =
+        "width:32px;background:transparent;border:none;outline:none;" +
+        "color:inherit;font:inherit;text-align:center;padding:0;" +
+        "-moz-appearance:textfield;appearance:textfield;";
+
+      span.textContent = "";
+      span.classList.remove(`${INLINE_CLASS}--unknown`);
+      span.appendChild(input);
+      input.focus();
+
+      let done = false;
+
+      function commit() {
+        if (done) return;
+        const val = parseInt(input.value, 10);
+        if (!isNaN(val) && val > 0 && val < 1000) {
+          done = true;
+          bpmCache.set(trackId, val);
+          scheduleSaveCache();
+          delete span.dataset.dbpmManualAttached;
+          renderBpmValue(span, trackId, row)(val);
+        } else {
+          restore();
+        }
+      }
+
+      function restore() {
+        if (done) return;
+        done = true;
+        if (span.contains(input)) input.remove();
+        span.textContent = "N/A";
+        span.classList.add(`${INLINE_CLASS}--unknown`);
+      }
+
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          restore();
+        }
+      });
+
+      input.addEventListener("blur", () => setTimeout(restore, 100));
+    });
+  }
+
   function renderBpmValue(span, trackId, row = null) {
     return (bpm) => {
       if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
@@ -82,6 +144,8 @@
       span.textContent = bpm !== null ? String(bpm) : "N/A";
       span.classList.toggle(`${INLINE_CLASS}--loaded`, bpm !== null);
       span.classList.toggle(`${INLINE_CLASS}--unknown`, bpm === null);
+
+      if (bpm === null) attachManualBpmEntry(span, trackId, row);
 
       updateRowFilterState(row, bpm);
     };
@@ -187,7 +251,9 @@
             if (!span.isConnected) return;
 
             span.textContent = "N/A";
+            span.classList.add(`${INLINE_CLASS}--unknown`);
             row.classList.remove(FILTER_MATCH_CLASS);
+            attachManualBpmEntry(span, trackId, row);
           });
       });
     }

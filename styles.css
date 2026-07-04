@@ -238,6 +238,12 @@
 }
 
 .dbpm-inline--unknown {
+  cursor: pointer;
+}
+
+.dbpm-inline--unknown:hover {
+  border-color: var(--tempo-colors-border-neutral-secondary-default, #555);
+  color: var(--tempo-colors-text-neutral-secondary-default, #888);
 }
 
 /* ── BPM column header (injected into the playlist header row) ──────────── */
