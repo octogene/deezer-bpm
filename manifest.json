@@ -10,6 +10,9 @@
     "128": "icons/icon128.png"
   },
   "homepage_url": "https://octogene.github.io/deezer-bpm/",
+  "background": {
+    "service_worker": "background.js"
+  },
   "permissions": ["storage"],
   "host_permissions": ["https://www.deezer.com/*", "https://api.deezer.com/*"],
   "browser_specific_settings": {

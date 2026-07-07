@@ -179,7 +179,10 @@
       span.textContent = effectiveBpm !== null ? String(effectiveBpm) : "N/A";
       span.classList.toggle(`${INLINE_CLASS}--loaded`, effectiveBpm !== null);
       span.classList.toggle(`${INLINE_CLASS}--unknown`, effectiveBpm === null);
-      span.classList.toggle(`${INLINE_CLASS}--manual`, manualBpmCache.has(trackId));
+      span.classList.toggle(
+        `${INLINE_CLASS}--manual`,
+        manualBpmCache.has(trackId),
+      );
 
       attachBpmEditor(span, trackId, row);
 

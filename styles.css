@@ -248,6 +248,7 @@
 
 .dbpm-inline--manual {
   border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.6);
   cursor: pointer;
 }
 
