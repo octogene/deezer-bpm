@@ -20,10 +20,16 @@
     parseBpmFilter,
   } = window.DeezerBpm.utils;
 
-  const { syncFilterButton } = window.DeezerBpm.badge;
+  const { syncFilterButton, refreshBadgeIfCurrentTrack } =
+    window.DeezerBpm.badge;
 
-  const { bpmCache, trackResolutionCache, scheduleSaveCache } =
-    window.DeezerBpm.cache;
+  const {
+    bpmCache,
+    trackResolutionCache,
+    manualBpmCache,
+    scheduleSaveCache,
+    getEffectiveBpm,
+  } = window.DeezerBpm.cache;
 
   const { fetchBpmCached } = window.DeezerBpm.api;
 
@@ -76,40 +82,66 @@
     }
   }
 
-  function attachManualBpmEntry(span, trackId, row) {
-    if (span.dataset.dbpmManualAttached) return;
-    span.dataset.dbpmManualAttached = "1";
-    span.title = "Double-click to enter BPM";
+  function syncBpmSpans(trackId) {
+    for (const span of document.querySelectorAll(
+      `.${INLINE_CLASS}[data-dbpm-track="${CSS.escape(trackId)}"]`,
+    )) {
+      const row = span.closest('[role="row"]') ?? null;
+      renderBpmValue(span, trackId, row)(bpmCache.get(trackId) ?? null);
+    }
+    refreshBadgeIfCurrentTrack(trackId);
+  }
+
+  function attachBpmEditor(span, trackId, row) {
+    if (span.dataset.dbpmEditorAttached) return;
+    span.dataset.dbpmEditorAttached = "1";
+    span.title = "Double-click to edit BPM";
 
     span.addEventListener("dblclick", (e) => {
       e.stopPropagation();
-      if (!span.classList.contains(`${INLINE_CLASS}--unknown`)) return;
+      if (span.querySelector("input")) return;
+
+      const currentManual = manualBpmCache.get(trackId);
 
       const input = document.createElement("input");
       input.type = "number";
       input.min = "1";
       input.max = "999";
+      if (currentManual !== undefined) input.value = String(currentManual);
       input.style.cssText =
         "width:32px;background:transparent;border:none;outline:none;" +
         "color:inherit;font:inherit;text-align:center;padding:0;" +
         "-moz-appearance:textfield;appearance:textfield;";
 
       span.textContent = "";
-      span.classList.remove(`${INLINE_CLASS}--unknown`);
+      span.classList.remove(
+        `${INLINE_CLASS}--loaded`,
+        `${INLINE_CLASS}--unknown`,
+        `${INLINE_CLASS}--manual`,
+      );
       span.appendChild(input);
       input.focus();
+      if (input.value) input.select();
 
       let done = false;
 
       function commit() {
         if (done) return;
-        const val = parseInt(input.value, 10);
+        const raw = input.value.trim();
+        const val = parseInt(raw, 10);
+
         if (!isNaN(val) && val > 0 && val < 1000) {
+          // Set or replace manual override
           done = true;
-          bpmCache.set(trackId, val);
+          manualBpmCache.set(trackId, val);
           scheduleSaveCache();
-          delete span.dataset.dbpmManualAttached;
-          renderBpmValue(span, trackId, row)(val);
+          syncBpmSpans(trackId);
+        } else if (raw === "" && currentManual !== undefined) {
+          // Clear manual override — revert to API value
+          done = true;
+          manualBpmCache.delete(trackId);
+          scheduleSaveCache();
+          syncBpmSpans(trackId);
         } else {
           restore();
         }
@@ -119,8 +151,7 @@
         if (done) return;
         done = true;
         if (span.contains(input)) input.remove();
-        span.textContent = "N/A";
-        span.classList.add(`${INLINE_CLASS}--unknown`);
+        renderBpmValue(span, trackId, row)(bpmCache.get(trackId) ?? null);
       }
 
       input.addEventListener("keydown", (e) => {
@@ -138,16 +169,21 @@
   }
 
   function renderBpmValue(span, trackId, row = null) {
-    return (bpm) => {
+    return (apiBpm) => {
       if (!span.isConnected || span.dataset.dbpmTrack !== trackId) return;
 
-      span.textContent = bpm !== null ? String(bpm) : "N/A";
-      span.classList.toggle(`${INLINE_CLASS}--loaded`, bpm !== null);
-      span.classList.toggle(`${INLINE_CLASS}--unknown`, bpm === null);
+      const effectiveBpm = manualBpmCache.has(trackId)
+        ? manualBpmCache.get(trackId)
+        : apiBpm;
 
-      if (bpm === null) attachManualBpmEntry(span, trackId, row);
+      span.textContent = effectiveBpm !== null ? String(effectiveBpm) : "N/A";
+      span.classList.toggle(`${INLINE_CLASS}--loaded`, effectiveBpm !== null);
+      span.classList.toggle(`${INLINE_CLASS}--unknown`, effectiveBpm === null);
+      span.classList.toggle(`${INLINE_CLASS}--manual`, manualBpmCache.has(trackId));
 
-      updateRowFilterState(row, bpm);
+      attachBpmEditor(span, trackId, row);
+
+      updateRowFilterState(row, effectiveBpm);
     };
   }
 
@@ -179,12 +215,12 @@
     const trackId = trackResolutionCache.get(rowKey);
     if (!trackId) return false;
 
-    const bpm = bpmCache.get(trackId);
-    if (bpm === undefined) return false;
+    const apiBpm = bpmCache.get(trackId);
+    if (apiBpm === undefined && !manualBpmCache.has(trackId)) return false;
 
     span.dataset.dbpmTrack = trackId;
     row.setAttribute(ROW_KEY_ATTR, rowKey);
-    renderBpmValue(span, trackId, row)(bpm);
+    renderBpmValue(span, trackId, row)(apiBpm ?? null);
     return true;
   }
 
@@ -249,11 +285,7 @@
           .catch((error) => {
             console.warn("[Deezer BPM] fetch error for track", trackId, error);
             if (!span.isConnected) return;
-
-            span.textContent = "N/A";
-            span.classList.add(`${INLINE_CLASS}--unknown`);
-            row.classList.remove(FILTER_MATCH_CLASS);
-            attachManualBpmEntry(span, trackId, row);
+            renderBpmValue(span, trackId, row)(null);
           });
       });
     }
@@ -361,7 +393,7 @@
         row,
         !trackId || trackId === UNRESOLVABLE
           ? undefined
-          : bpmCache.get(trackId),
+          : getEffectiveBpm(trackId),
       );
     });
   }
@@ -429,6 +461,7 @@
     getRowKey,
     renderBpmValue,
     createBpmSpan,
+    syncBpmSpans,
     injectBpmsIntoRows,
     injectColumnHeader,
     injectPlaceholders,

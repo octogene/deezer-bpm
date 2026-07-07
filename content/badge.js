@@ -18,6 +18,8 @@
 
   const { fetchBpmCached } = window.DeezerBpm.api;
 
+  const { getEffectiveBpm } = window.DeezerBpm.cache;
+
   const { detectTrackIdFromPlayer } = window.DeezerBpm.resolver;
 
   let currentTrackId = null;
@@ -186,6 +188,12 @@
     currentTrackId = null;
   }
 
+  function refreshBadgeIfCurrentTrack(trackId) {
+    if (trackId !== currentTrackId) return;
+    const bpm = getEffectiveBpm(trackId) ?? null;
+    setBadgeValue(bpm ?? "N/A", bpm !== null);
+  }
+
   function schedulePlayerBadgeUpdate(delay = BADGE_UPDATE_DELAY_MS) {
     clearTimeout(badgeUpdateTimer);
     badgeUpdateTimer = setTimeout(() => {
@@ -223,7 +231,8 @@
       currentTrackId = trackId;
       setBadgeValue("…");
 
-      const bpm = await fetchBpmCached(trackId);
+      await fetchBpmCached(trackId);
+      const bpm = getEffectiveBpm(trackId) ?? null;
       logDebugInfo("[BADGE] Fetched track BPM:", bpm);
       setBadgeValue(bpm ?? "N/A", bpm !== null);
     } catch (error) {
@@ -262,6 +271,7 @@
     syncPlaylistModeButton,
     syncFilterButton,
     resetCurrentTrackId,
+    refreshBadgeIfCurrentTrack,
     schedulePlayerBadgeUpdate,
     runPlayerBadgeUpdate,
     ensureBadgeObserver,

@@ -29,6 +29,7 @@
     COVER_TRACK_CACHE_STORAGE_KEY: "deezerCoverTrackCache",
     UNRESOLVABLE_CACHE_LAST_CLEAR_STORAGE_KEY:
       "deezerBpmUnresolvableCacheLastClear",
+    MANUAL_BPM_STORAGE_KEY: "deezerBpmManualOverrides",
 
     // Special values
     COVER_PLACEHOLDER_ID: "d41d8cd98f00b204e9800998ecf8427e",
