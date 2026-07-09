@@ -128,9 +128,9 @@
       function commit() {
         if (done) return;
         const raw = input.value.trim();
-        const val = parseInt(raw, 10);
+        const val = Number(raw);
 
-        if (!isNaN(val) && val > 0 && val < 1000) {
+        if (Number.isInteger(val) && val > 0 && val < 1000) {
           // Set or replace manual override
           done = true;
           manualBpmCache.set(trackId, val);
