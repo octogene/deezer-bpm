@@ -552,6 +552,15 @@
         </p>
       </div>
       <div class="feature">
+        <div class="feature-icon">✏️</div>
+        <h3 data-i18n="feat_manual_title">Manual BPM editing</h3>
+        <p data-i18n="feat_manual_desc">
+          Double-click any BPM value in a playlist or queue to enter your own —
+          handy for tracks showing N/A or with inaccurate data. Your value is
+          saved and persists across sessions.
+        </p>
+      </div>
+      <div class="feature">
         <div class="feature-icon">⚡</div>
         <h3 data-i18n="feat3_title">Instant &amp; cached</h3>
         <p data-i18n="feat3_desc">
@@ -709,6 +718,44 @@
             "scroll glitches" or UI jumps while scrolling through large
             playlists with an active filter. This is a side-effect of ensuring
             tracks are correctly registered by Deezer's selection system.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_manual_q"
+            >Can I correct or set a BPM value myself?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n="faq_manual_short">
+            Yes. Double-click any BPM value shown next to a track in a playlist
+            or queue to open a small input, type a value, and press
+            <kbd>Enter</kbd>. This works both on tracks showing
+            <strong>N/A</strong> and on tracks that already have an
+            API-provided BPM. Your value is saved and reused across sessions.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n-html="faq_manual_long1">
+            A manually entered value takes priority over the value from Deezer's
+            API and is shown with a dashed border so you can tell at a glance
+            which numbers came from you. Overrides are stored separately from the
+            regular BPM cache, so they survive a cache clear and are never
+            evicted automatically.
+          </p>
+          <p data-i18n="faq_manual_long2">
+            To remove an override and go back to Deezer's value, double-click the
+            badge, clear the input, and press <kbd>Enter</kbd> — the original API
+            value reappears immediately. Pressing <kbd>Escape</kbd> or clicking
+            away cancels the edit without changing anything.
           </p>
         </div>
       </div>
@@ -977,6 +1024,9 @@
             'Sélection par BPM <span style="display:inline-block;font-size:.65rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#b45a00;background:rgba(255,160,0,.15);border:1px solid rgba(255,160,0,.35);border-radius:4px;padding:1px 6px;vertical-align:middle;line-height:1.6">Expérimental</span>',
           feat_selection_desc:
             'Filtrez et sélectionnez les titres par BPM en utilisant des expressions comme <code style="background:rgba(162,56,255,.15);color:var(--purple-lt);padding:1px 5px;border-radius:4px;font-size:.85em">&gt;120</code> ou <code style="background:rgba(162,56,255,.15);color:var(--purple-lt);padding:1px 5px;border-radius:4px;font-size:.85em">&lt;=90</code> — les titres correspondants sont cochés automatiquement lors du défilement.',
+          feat_manual_title: "Édition manuelle des BPM",
+          feat_manual_desc:
+            "Double-cliquez sur n'importe quelle valeur BPM dans une playlist ou la file d'attente pour saisir la vôtre — pratique pour les titres affichant N/A ou aux données inexactes. Votre valeur est enregistrée et conservée entre les sessions.",
           feat3_title: "Instantané &amp; en cache",
           feat3_desc:
             "Les valeurs BPM sont mises en cache entre les sessions pour que les titres déjà consultés s'affichent instantanément, sans nouvel appel API.",
@@ -1015,6 +1065,14 @@
             "Si vous êtes dans une vue playlist ou album, l'extension cochera également automatiquement la case de sélection de chaque titre correspondant au fur et à mesure qu'il apparaît lors du défilement. Cela facilite ensuite les actions groupées, comme « Ajouter à une playlist » ou « Ajouter à la file d'attente », en utilisant les outils natifs de Deezer. Fermer le champ de filtre (en recliquant sur l'icône) effacera les mises en évidence et désactivera le filtre, mais conservera les titres déjà sélectionnés cochés.",
           faq_filter_long3:
             "<strong>Note :</strong> En raison de la manière dont l'extension interagit avec le système de cases à cocher de Deezer, vous pouvez rencontrer de légers « sauts » d'interface lors du défilement de grandes playlists avec un filtre actif. C'est un effet secondaire nécessaire pour garantir que les titres sont correctement enregistrés par le système de sélection de Deezer.",
+
+          faq_manual_q: "Puis-je corriger ou définir moi-même une valeur BPM ?",
+          faq_manual_short:
+            "Oui. Double-cliquez sur n'importe quelle valeur BPM affichée à côté d'un titre dans une playlist ou la file d'attente pour ouvrir un petit champ, saisissez une valeur et appuyez sur <kbd>Entrée</kbd>. Cela fonctionne aussi bien sur les titres affichant <strong>N/A</strong> que sur ceux ayant déjà un BPM fourni par l'API. Votre valeur est enregistrée et réutilisée entre les sessions.",
+          faq_manual_long1:
+            "Une valeur saisie manuellement est prioritaire sur celle de l'API Deezer et s'affiche avec une bordure en pointillés, pour distinguer d'un coup d'œil les nombres qui viennent de vous. Les valeurs personnalisées sont stockées séparément du cache BPM habituel : elles survivent donc au vidage du cache et ne sont jamais supprimées automatiquement.",
+          faq_manual_long2:
+            "Pour retirer une valeur personnalisée et revenir à celle de Deezer, double-cliquez sur le badge, videz le champ et appuyez sur <kbd>Entrée</kbd> — la valeur d'origine de l'API réapparaît immédiatement. Appuyer sur <kbd>Échap</kbd> ou cliquer ailleurs annule la modification sans rien changer.",
 
           faq_queue_diff_q:
             "Pourquoi les valeurs BPM dans la file d'attente sont-elles parfois différentes du badge ou de ce qu'elles étaient avant ?",
