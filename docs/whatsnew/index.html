@@ -52,34 +52,6 @@
         );
       }
 
-      .badge {
-        width: 72px;
-        height: 72px;
-        border-radius: 50%;
-        background: var(--surface);
-        border: 2.5px solid var(--purple);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 2px;
-        margin-bottom: 24px;
-      }
-
-      .badge-label {
-        font-size: 9px;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        color: var(--muted);
-        text-transform: uppercase;
-      }
-
-      .badge-value {
-        font-size: 18px;
-        font-weight: 800;
-        color: color-mix(in srgb, var(--purple) 60%, white);
-      }
-
       .hero h1 {
         font-size: 1.8rem;
         font-weight: 800;
@@ -220,10 +192,7 @@
   </head>
   <body>
     <div class="hero">
-      <div class="badge">
-        <span class="badge-label">BPM</span>
-        <span class="badge-value">128</span>
-      </div>
+      <img src="../../icons/icon128.png" width="72" height="72" alt="Deezer BPM icon" style="border-radius:50%; margin-bottom:24px;" />
       <h1>What's New in Deezer BPM</h1>
       <span class="version-chip" id="version-chip">v0.6.0</span>
       <p>Manual BPM editing</p>
@@ -279,13 +248,5 @@
       </div>
     </div>
 
-    <script>
-      try {
-        const rt =
-          typeof browser !== "undefined" ? browser.runtime : chrome.runtime;
-        const v = rt?.getManifest?.()?.version;
-        if (v) document.getElementById("version-chip").textContent = "v" + v;
-      } catch (_) {}
-    </script>
   </body>
 </html>
