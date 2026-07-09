@@ -238,6 +238,23 @@
 }
 
 .dbpm-inline--unknown {
+  cursor: pointer;
+}
+
+.dbpm-inline--unknown:hover {
+  border-color: var(--tempo-colors-border-neutral-secondary-default, #555);
+  color: var(--tempo-colors-text-neutral-secondary-default, #888);
+}
+
+.dbpm-inline--manual {
+  border-style: dashed;
+  border-color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+}
+
+.dbpm-inline--loaded:hover,
+.dbpm-inline--unknown:hover {
+  opacity: 0.85;
 }
 
 /* ── BPM column header (injected into the playlist header row) ──────────── */

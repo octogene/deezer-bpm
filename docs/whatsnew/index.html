@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Deezer BPM — What's New</title>
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      :root {
+        --bg: #0f0f1a;
+        --surface: #1a1a2e;
+        --border: #2a2a44;
+        --purple: #a238ff;
+        --purple-lt: #c97dff;
+        --green: #1db954;
+        --text: #e8e8f0;
+        --muted: #888;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.6;
+      }
+
+      a {
+        color: var(--purple-lt);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+
+      .hero {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 64px 24px 48px;
+        background: radial-gradient(
+          ellipse 70% 50% at 50% 0%,
+          rgba(162, 56, 255, 0.18) 0%,
+          transparent 70%
+        );
+      }
+
+      .hero h1 {
+        font-size: 1.8rem;
+        font-weight: 800;
+        margin-bottom: 8px;
+      }
+
+      .version-chip {
+        display: inline-block;
+        background: color-mix(in srgb, var(--purple) 20%, transparent);
+        border: 1px solid color-mix(in srgb, var(--purple) 50%, transparent);
+        color: var(--purple-lt);
+        font-size: 0.8rem;
+        font-weight: 600;
+        padding: 2px 12px;
+        border-radius: 99px;
+        margin-bottom: 16px;
+      }
+
+      .hero p {
+        color: var(--muted);
+        font-size: 0.95rem;
+        max-width: 480px;
+      }
+
+      .content {
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 0 24px 80px;
+      }
+
+      .section {
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: var(--surface);
+        padding: 28px 32px;
+        margin-bottom: 20px;
+      }
+
+      .section-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .section-icon {
+        font-size: 1.2rem;
+      }
+
+      .section-title {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--text);
+        letter-spacing: 0.02em;
+      }
+
+      .feature {
+        display: flex;
+        gap: 16px;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .feature:last-child {
+        border-bottom: none;
+        padding-bottom: 0;
+      }
+
+      .feature:first-child {
+        padding-top: 0;
+      }
+
+      .feature-icon {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--purple) 15%, transparent);
+        border: 1px solid color-mix(in srgb, var(--purple) 30%, transparent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1rem;
+      }
+
+      .feature-body h3 {
+        font-size: 0.95rem;
+        font-weight: 700;
+        margin-bottom: 4px;
+        color: var(--text);
+      }
+
+      .feature-body p {
+        font-size: 0.875rem;
+        color: var(--muted);
+        line-height: 1.55;
+      }
+
+      kbd {
+        display: inline-block;
+        padding: 1px 6px;
+        border-radius: 4px;
+        border: 1px solid var(--border);
+        background: var(--bg);
+        font-family: monospace;
+        font-size: 0.8em;
+        color: var(--text);
+      }
+
+      .tag {
+        display: inline-block;
+        padding: 1px 8px;
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 600;
+      }
+
+      .tag--new {
+        background: color-mix(in srgb, var(--purple) 20%, transparent);
+        border: 1px solid color-mix(in srgb, var(--purple) 40%, transparent);
+        color: var(--purple-lt);
+      }
+
+      .dashed-demo {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px dashed rgba(255, 255, 255, 0.6);
+        background: color-mix(in srgb, var(--purple) 13%, transparent);
+        color: color-mix(in srgb, var(--purple) 50%, white);
+        font-size: 11px;
+        font-weight: 700;
+        vertical-align: middle;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="hero">
+      <img
+        src="../../icons/icon128.png"
+        width="72"
+        height="72"
+        alt="Deezer BPM icon"
+        style="border-radius: 50%; margin-bottom: 24px"
+      />
+      <h1>What's New in Deezer BPM</h1>
+      <span class="version-chip" id="version-chip">v0.6.0</span>
+      <p>Manual BPM editing</p>
+    </div>
+
+    <div class="content">
+      <div class="section">
+        <div class="section-header">
+          <span class="section-icon">✏️</span>
+          <span class="section-title">New Features</span>
+        </div>
+
+        <div class="feature">
+          <div class="feature-icon">✏️</div>
+          <div class="feature-body">
+            <h3>
+              Edit any BPM by double-clicking
+              <span class="tag tag--new">New</span>
+            </h3>
+            <p>
+              Double-click any BPM badge in a playlist or queue to enter a value
+              manually. Works on tracks showing <strong>N/A</strong> as well as
+              tracks that already have an API-provided BPM. Your value is saved
+              and persists across sessions.
+            </p>
+          </div>
+        </div>
+
+        <div class="feature">
+          <div class="feature-icon">↩️</div>
+          <div class="feature-body">
+            <h3>Revert to the original API value</h3>
+            <p>
+              If you entered a manual BPM and want to go back, double-click the
+              badge, clear the input, and press <kbd>Enter</kbd>. The original
+              value downloaded from Deezer's API will reappear immediately.
+            </p>
+          </div>
+        </div>
+
+        <div class="feature">
+          <div class="feature-icon">⬡</div>
+          <div class="feature-body">
+            <h3>Visual indicator for manual values</h3>
+            <p>
+              Manually entered BPM badges use a dashed border
+              <span class="dashed-demo">128</span>
+              so you can tell at a glance which values came from you versus the
+              API.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

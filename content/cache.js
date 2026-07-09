@@ -13,6 +13,7 @@
     UNRESOLVABLE_CACHE_MAX_AGE_MS,
     MAX_CACHE_SIZE,
     CACHE_SAVE_DEBOUNCE_MS,
+    MANUAL_BPM_STORAGE_KEY,
     LOG_PREFIX,
   } = window.DeezerBpm.constants;
 
@@ -52,6 +53,8 @@
   const coverCache = new LruMap(MAX_CACHE_SIZE);
   const albumCache = new LruMap(MAX_CACHE_SIZE);
   const trackResolutionCache = new LruMap(MAX_CACHE_SIZE);
+  // User-entered overrides — plain Map (never evicted, survives cache clears)
+  const manualBpmCache = new Map();
   const inFlight = new Map();
 
   const storageApi =
@@ -136,6 +139,7 @@
         BPM_CACHE_STORAGE_KEY,
         COVER_CACHE_STORAGE_KEY,
         COVER_TRACK_CACHE_STORAGE_KEY,
+        MANUAL_BPM_STORAGE_KEY,
       ]);
 
       const savedBpm = cache[BPM_CACHE_STORAGE_KEY];
@@ -158,6 +162,16 @@
           trackResolutionCache.set(key, trackId);
         }
       }
+
+      const savedManual = cache[MANUAL_BPM_STORAGE_KEY];
+      if (savedManual && typeof savedManual === "object") {
+        for (const [id, bpmRaw] of Object.entries(savedManual)) {
+          const bpm = Number(bpmRaw);
+          if (Number.isFinite(bpm) && bpm > 0 && bpm < 1000) {
+            manualBpmCache.set(id, Math.trunc(bpm));
+          }
+        }
+      }
     } catch (error) {
       console.warn(`${LOG_PREFIX} Could not load caches:`, error);
     }
@@ -172,10 +186,18 @@
         [COVER_CACHE_STORAGE_KEY]: Object.fromEntries(coverCache),
         [COVER_TRACK_CACHE_STORAGE_KEY]:
           Object.fromEntries(trackResolutionCache),
+        [MANUAL_BPM_STORAGE_KEY]: Object.fromEntries(manualBpmCache),
       })
       .catch((error) => {
         console.warn(`${LOG_PREFIX} Could not persist cache:`, error);
       });
+  }
+
+  // Returns the BPM to display: manual override takes priority over API value.
+  // Returns null if neither source has a value; undefined if API not yet fetched.
+  function getEffectiveBpm(trackId) {
+    if (manualBpmCache.has(trackId)) return manualBpmCache.get(trackId);
+    return bpmCache.get(trackId);
   }
 
   function scheduleSaveCache() {
@@ -201,6 +223,7 @@
     coverCache,
     albumCache,
     trackResolutionCache,
+    manualBpmCache,
     inFlight,
     storageApi,
     checkCacheClear,
@@ -210,5 +233,6 @@
     persistCaches,
     scheduleSaveCache,
     flushPendingCacheSave,
+    getEffectiveBpm,
   };
 })();
