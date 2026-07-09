@@ -56,10 +56,13 @@
   }
 
   function getRowKey(row) {
-    const titleEl = row.querySelector('[data-testid="title"]');
-    const title = titleEl?.textContent.trim() ?? "";
+    const title = getRowTitle(row);
     const coverId = extractCoverId(row);
     return makeCoverTrackKey(coverId, title);
+  }
+
+  function getRowTitle(row) {
+    return row.querySelector('[data-testid="title"]')?.textContent.trim() ?? "";
   }
 
   function getRowFilterMatch(bpm) {
@@ -253,7 +256,11 @@
 
       row.setAttribute(INJECTED_ATTR, "pending");
 
-      const span = createBpmSpan(row);
+      const rowTitle = getRowTitle(row);
+
+      // Reuse a placeholder left behind by a previous pass (see the
+      // recycled-row guard below) so the BPM cell never blanks out.
+      const span = row.querySelector(`.${INLINE_CLASS}`) ?? createBpmSpan(row);
 
       resolveTrackId(row).then((trackId) => {
         if (!row.isConnected) {
@@ -266,8 +273,15 @@
           return;
         }
 
-        if (getRowKey(row) !== rowKey) {
-          resetInjectedRow(row, span);
+        // The row was recycled to a different track while we were
+        // resolving. Compare titles rather than the full row key: covers
+        // lazy-load, so a row's cover id flips from null to a real value
+        // mid-resolution, and that must NOT be treated as a recycle.
+        // Keep the "…" placeholder and let the next pass re-resolve so the
+        // cell doesn't flicker to blank during scrolling.
+        if (getRowTitle(row) !== rowTitle) {
+          row.removeAttribute(INJECTED_ATTR);
+          row.removeAttribute(ROW_KEY_ATTR);
           return;
         }
 
@@ -278,7 +292,9 @@
           return;
         }
 
-        row.setAttribute(ROW_KEY_ATTR, rowKey);
+        // Stamp the up-to-date key (the cover has loaded by now) so the row
+        // settles in a single pass instead of being re-checked next scan.
+        row.setAttribute(ROW_KEY_ATTR, getRowKey(row));
 
         if (trackId === UNRESOLVABLE) {
           span.textContent = "✕";
