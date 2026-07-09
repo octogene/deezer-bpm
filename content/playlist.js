@@ -266,6 +266,11 @@
           return;
         }
 
+        if (getRowKey(row) !== rowKey) {
+          resetInjectedRow(row, span);
+          return;
+        }
+
         row.setAttribute(INJECTED_ATTR, "1");
 
         if (trackId === null) {
