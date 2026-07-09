@@ -163,12 +163,13 @@
         }
       }
 
-      // Manual overrides are loaded separately — they are NOT put into bpmCache
-      // so the original API value is always preserved there
       const savedManual = cache[MANUAL_BPM_STORAGE_KEY];
       if (savedManual && typeof savedManual === "object") {
-        for (const [id, bpm] of Object.entries(savedManual)) {
-          manualBpmCache.set(id, bpm);
+        for (const [id, bpmRaw] of Object.entries(savedManual)) {
+          const bpm = Number(bpmRaw);
+          if (Number.isFinite(bpm) && bpm > 0 && bpm < 1000) {
+            manualBpmCache.set(id, Math.trunc(bpm));
+          }
         }
       }
     } catch (error) {
