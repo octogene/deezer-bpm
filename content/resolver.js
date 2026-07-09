@@ -6,7 +6,6 @@
   const { UNRESOLVABLE } = window.DeezerBpm.constants;
 
   const {
-    normalizeTrackKeyPart,
     makeCoverTrackKey,
     makeAlbumTrackKey,
     extractCoverId,
