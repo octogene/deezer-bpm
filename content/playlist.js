@@ -95,7 +95,7 @@
     refreshBadgeIfCurrentTrack(trackId);
   }
 
-  function attachBpmEditor(span, trackId, row) {
+  function attachBpmEditor(span, row) {
     if (span.dataset.dbpmEditorAttached) return;
     span.dataset.dbpmEditorAttached = "1";
     span.title = "Double-click to edit BPM";
@@ -103,6 +103,12 @@
     span.addEventListener("dblclick", (e) => {
       e.stopPropagation();
       if (span.querySelector("input")) return;
+
+      // Read the track id live: the span (and this one-time listener) is
+      // reused when a row is recycled to another track — e.g. reordering a
+      // playlist — so a closure-captured id would edit the wrong track.
+      const trackId = span.dataset.dbpmTrack;
+      if (!trackId) return;
 
       const currentManual = manualBpmCache.get(trackId);
 
@@ -187,7 +193,7 @@
         manualBpmCache.has(trackId),
       );
 
-      attachBpmEditor(span, trackId, row);
+      attachBpmEditor(span, row);
 
       updateRowFilterState(row, effectiveBpm);
     };
