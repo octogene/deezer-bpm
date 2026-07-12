@@ -2,7 +2,7 @@ import globals from "globals";
 
 export default [
   {
-    files: ["content/**/*.js"],
+    files: ["content/**/*.js", "popup/**/*.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "script",

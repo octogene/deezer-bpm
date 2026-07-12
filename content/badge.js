@@ -194,6 +194,14 @@
     setBadgeValue(bpm ?? "N/A", bpm !== null);
   }
 
+  // Re-renders the player badge for whatever track is currently playing. Used
+  // after an import changes manual overrides.
+  function refreshBadgeCurrent() {
+    if (!currentTrackId) return;
+    const bpm = getEffectiveBpm(currentTrackId) ?? null;
+    setBadgeValue(bpm ?? "N/A", bpm !== null);
+  }
+
   function schedulePlayerBadgeUpdate(delay = BADGE_UPDATE_DELAY_MS) {
     clearTimeout(badgeUpdateTimer);
     badgeUpdateTimer = setTimeout(() => {
@@ -272,6 +280,7 @@
     syncFilterButton,
     resetCurrentTrackId,
     refreshBadgeIfCurrentTrack,
+    refreshBadgeCurrent,
     schedulePlayerBadgeUpdate,
     runPlayerBadgeUpdate,
     ensureBadgeObserver,

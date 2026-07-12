@@ -428,6 +428,20 @@
     });
   }
 
+  // Re-renders every injected BPM cell against the current caches. Used after an
+  // import replaces manualBpmCache so overrides appear without a page reload.
+  function refreshAllVisibleBpms() {
+    for (const span of document.querySelectorAll(
+      `.${INLINE_CLASS}[data-dbpm-track]`,
+    )) {
+      const trackId = span.dataset.dbpmTrack;
+      if (!trackId) continue;
+      const row = span.closest('[role="row"]') ?? null;
+      renderBpmValue(span, trackId, row)(bpmCache.get(trackId) ?? null);
+    }
+    scheduleApplyFilter();
+  }
+
   function scheduleApplyFilter() {
     if (filterApplyScheduled) return;
 
@@ -499,6 +513,7 @@
     removePlaylistBpms,
     applyFilterToVisibleRows,
     scheduleApplyFilter,
+    refreshAllVisibleBpms,
     initPlaylistFilter,
   };
 })();

@@ -3,7 +3,8 @@
 
   window.DeezerBpm = window.DeezerBpm || {};
 
-  const { PLAYLIST_MODE_KEY } = window.DeezerBpm.constants;
+  const { PLAYLIST_MODE_KEY, MANUAL_BPM_STORAGE_KEY } =
+    window.DeezerBpm.constants;
 
   const {
     checkCacheClear,
@@ -11,7 +12,11 @@
     checkUnresolvableCacheAge,
     loadPersistedCache,
     flushPendingCacheSave,
+    applyManualOverridesFromStorage,
+    storageApi,
   } = window.DeezerBpm.cache;
+
+  const { logDebugInfo } = window.DeezerBpm.utils;
 
   const { resolveRowTrackId } = window.DeezerBpm.resolver;
 
@@ -19,6 +24,7 @@
     getBadge,
     syncPlaylistModeButton,
     resetCurrentTrackId,
+    refreshBadgeCurrent,
     schedulePlayerBadgeUpdate,
     initBadge,
   } = window.DeezerBpm.badge;
@@ -29,6 +35,7 @@
     removePlaylistBpms,
     initPlaylistFilter,
     scheduleApplyFilter,
+    refreshAllVisibleBpms,
   } = window.DeezerBpm.playlist;
 
   const {
@@ -194,6 +201,29 @@
 
   setupToggleListener(() => {
     setPlaylistMode(!playlistModeEnabled);
+  });
+
+  // Apply manual-BPM imports made from the popup (which writes to storage.local)
+  // without requiring a page reload.
+  storageApi.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+
+    const change = changes[MANUAL_BPM_STORAGE_KEY];
+    if (!change) return;
+
+    logDebugInfo(
+      "[IMPORT] Manual overrides changed in storage; entries:",
+      change.newValue ? Object.keys(change.newValue).length : 0,
+    );
+
+    if (!applyManualOverridesFromStorage(change.newValue)) {
+      logDebugInfo("[IMPORT] No effective change to in-memory cache; skipping");
+      return;
+    }
+
+    logDebugInfo("[IMPORT] Applied override change; refreshing visible BPMs");
+    refreshAllVisibleBpms();
+    refreshBadgeCurrent();
   });
 
   checkCacheClear()
