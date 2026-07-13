@@ -561,6 +561,15 @@
         </p>
       </div>
       <div class="feature">
+        <div class="feature-icon">💾</div>
+        <h3 data-i18n="feat_export_title">Import &amp; export</h3>
+        <p data-i18n="feat_export_desc">
+          Back up your manually entered BPMs to a CSV file from the toolbar
+          menu, then import them on another device or after a reinstall.
+          Imported files are validated before anything is applied.
+        </p>
+      </div>
+      <div class="feature">
         <div class="feature-icon">⚡</div>
         <h3 data-i18n="feat3_title">Instant &amp; cached</h3>
         <p data-i18n="feat3_desc">
@@ -665,9 +674,9 @@
             a complete dataset for every track, a meaningful sort isn't
             possible. On top of that, reordering the rows would require taking
             over Deezer's own DOM management, which is fragile and likely to
-            break with any Deezer update. A future version may offer an export
-            of BPM data or a sorted overlay view, but true in-place sorting is
-            not planned for now.
+            break with any Deezer update. Manually entered BPMs can now be
+            exported to a file from the toolbar menu, but true in-place sorting
+            is not planned for now.
           </p>
         </div>
       </div>
@@ -757,6 +766,43 @@
             original API value reappears immediately. Pressing
             <kbd>Escape</kbd> or clicking away cancels the edit without changing
             anything.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_export_q"
+            >Can I back up or transfer my manual BPMs?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n="faq_export_short">
+            Yes. Click the extension's toolbar icon to open its menu, then use
+            <strong>Export CSV</strong> to save all your manually entered BPMs
+            to a file, and <strong>Import CSV</strong> to load them back — on
+            another device, or after reinstalling.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_export_long1">
+            The exported file is a small CSV with one row per track: its Deezer
+            track ID and your BPM value. Only your manual overrides are exported
+            — values fetched automatically from Deezer are not included.
+          </p>
+          <p data-i18n="faq_export_long2">
+            On import, the file is validated before anything is saved: it must
+            have the right columns, each track ID must be numeric, and each BPM
+            must be a whole number between 1 and 999. Invalid rows are skipped
+            and reported. You can choose to merge the file with your existing
+            overrides or replace them entirely, and imported values appear
+            immediately without reloading the page.
           </p>
         </div>
       </div>
@@ -1028,6 +1074,9 @@
           feat_manual_title: "Édition manuelle des BPM",
           feat_manual_desc:
             "Double-cliquez sur n'importe quelle valeur BPM dans une playlist ou la file d'attente pour saisir la vôtre — pratique pour les titres affichant N/A ou aux données inexactes. Votre valeur est enregistrée et conservée entre les sessions.",
+          feat_export_title: "Import &amp; export",
+          feat_export_desc:
+            "Sauvegardez vos BPM saisis manuellement dans un fichier CSV depuis le menu de la barre d'outils, puis importez-les sur un autre appareil ou après une réinstallation. Les fichiers importés sont validés avant toute application.",
           feat3_title: "Instantané &amp; en cache",
           feat3_desc:
             "Les valeurs BPM sont mises en cache entre les sessions pour que les titres déjà consultés s'affichent instantanément, sans nouvel appel API.",
@@ -1054,7 +1103,7 @@
           faq_sort_short:
             "Les valeurs BPM sont récupérées une par une au fur et à mesure du défilement — tant que vous n'avez pas fait défiler tous les titres, l'extension n'a pas toutes les données nécessaires pour effectuer un tri. Deezer ne propose pas non plus de moyen natif pour les extensions de réordonner les titres.",
           faq_sort_long:
-            "Deezer utilise une liste virtualisée pour afficher les playlists : seules les lignes visibles à l'écran existent dans le DOM et sont recyclées au défilement. Cela signifie que l'extension ne peut récupérer et afficher les BPM que des titres ayant été rendus au moins une fois. Sans données complètes pour chaque titre, un tri pertinent n'est pas possible. De plus, réordonner les lignes nécessiterait de prendre le contrôle de la gestion DOM de Deezer, ce qui est fragile et risque de se briser à chaque mise à jour. Une future version pourra proposer un export des données BPM, mais le tri en place n'est pas prévu pour l'instant.",
+            "Deezer utilise une liste virtualisée pour afficher les playlists : seules les lignes visibles à l'écran existent dans le DOM et sont recyclées au défilement. Cela signifie que l'extension ne peut récupérer et afficher les BPM que des titres ayant été rendus au moins une fois. Sans données complètes pour chaque titre, un tri pertinent n'est pas possible. De plus, réordonner les lignes nécessiterait de prendre le contrôle de la gestion DOM de Deezer, ce qui est fragile et risque de se briser à chaque mise à jour. Les BPM saisis manuellement peuvent désormais être exportés dans un fichier depuis le menu de la barre d'outils, mais le tri en place n'est pas prévu pour l'instant.",
 
           faq_filter_q:
             "Comment fonctionnent la sélection et le filtrage par BPM ?",
@@ -1074,6 +1123,14 @@
             "Une valeur saisie manuellement est prioritaire sur celle de l'API Deezer et s'affiche avec une bordure en pointillés, pour distinguer d'un coup d'œil les nombres qui viennent de vous. Les valeurs personnalisées sont stockées séparément du cache BPM habituel : elles survivent donc au vidage du cache et ne sont jamais supprimées automatiquement.",
           faq_manual_long2:
             "Pour retirer une valeur personnalisée et revenir à celle de Deezer, double-cliquez sur le badge, videz le champ et appuyez sur <kbd>Entrée</kbd> — la valeur d'origine de l'API réapparaît immédiatement. Appuyer sur <kbd>Échap</kbd> ou cliquer ailleurs annule la modification sans rien changer.",
+
+          faq_export_q: "Puis-je sauvegarder ou transférer mes BPM manuels ?",
+          faq_export_short:
+            "Oui. Cliquez sur l'icône de l'extension dans la barre d'outils pour ouvrir son menu, puis utilisez <strong>Exporter CSV</strong> pour enregistrer tous vos BPM saisis manuellement dans un fichier, et <strong>Importer CSV</strong> pour les recharger — sur un autre appareil ou après une réinstallation.",
+          faq_export_long1:
+            "Le fichier exporté est un petit CSV avec une ligne par titre : son identifiant Deezer et votre valeur BPM. Seules vos valeurs personnalisées sont exportées — les valeurs récupérées automatiquement depuis Deezer ne sont pas incluses.",
+          faq_export_long2:
+            "À l'import, le fichier est validé avant tout enregistrement : il doit comporter les bonnes colonnes, chaque identifiant doit être numérique et chaque BPM doit être un nombre entier entre 1 et 999. Les lignes invalides sont ignorées et signalées. Vous pouvez choisir de fusionner le fichier avec vos valeurs existantes ou de les remplacer entièrement, et les valeurs importées apparaissent immédiatement sans recharger la page.",
 
           faq_queue_diff_q:
             "Pourquoi les valeurs BPM dans la file d'attente sont-elles parfois différentes du badge ou de ce qu'elles étaient avant ?",

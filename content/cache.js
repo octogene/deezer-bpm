@@ -193,6 +193,37 @@
       });
   }
 
+  // Rebuilds manualBpmCache from a stored overrides object (same shape and
+  // validation as loadPersistedCache). Used when the popup imports overrides and
+  // writes to storage.local. Returns true only if the contents actually changed,
+  // so we ignore our own debounced persistCaches() writes.
+  function applyManualOverridesFromStorage(rawValue) {
+    const next = new Map();
+    if (rawValue && typeof rawValue === "object") {
+      for (const [id, bpmRaw] of Object.entries(rawValue)) {
+        const bpm = Number(bpmRaw);
+        if (Number.isFinite(bpm) && bpm > 0 && bpm < 1000) {
+          next.set(id, Math.trunc(bpm));
+        }
+      }
+    }
+
+    if (next.size === manualBpmCache.size) {
+      let identical = true;
+      for (const [id, bpm] of next) {
+        if (manualBpmCache.get(id) !== bpm) {
+          identical = false;
+          break;
+        }
+      }
+      if (identical) return false;
+    }
+
+    manualBpmCache.clear();
+    for (const [id, bpm] of next) manualBpmCache.set(id, bpm);
+    return true;
+  }
+
   // Returns the BPM to display: manual override takes priority over API value.
   // Returns null if neither source has a value; undefined if API not yet fetched.
   function getEffectiveBpm(trackId) {
@@ -234,5 +265,6 @@
     scheduleSaveCache,
     flushPendingCacheSave,
     getEffectiveBpm,
+    applyManualOverridesFromStorage,
   };
 })();
