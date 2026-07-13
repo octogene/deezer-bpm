@@ -25,6 +25,33 @@
       <button id="import-btn" type="button">Import CSV…</button>
     </div>
 
+    <div class="group">
+      <h2>Sync</h2>
+      <p>
+        Sync your manual BPMs online with a private sync code. Keep it secret —
+        anyone with the code can read and change your BPMs.
+      </p>
+      <input
+        type="text"
+        id="sync-code"
+        placeholder="Paste a code, or Generate one"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+      />
+      <div class="sync-actions">
+        <button id="generate-btn" type="button">Generate</button>
+        <button id="copy-btn" type="button">Copy</button>
+      </div>
+      <label class="replace-row">
+        <input type="checkbox" id="auto-sync" />
+        Auto-sync every 15 minutes
+      </label>
+      <button id="merge-btn" type="button">Merge now</button>
+      <button id="lww-btn" type="button">Last-write-wins now</button>
+      <p class="sync-info" id="sync-info"></p>
+    </div>
+
     <div id="status" class="info"></div>
 
     <script src="../content/constants.js"></script>

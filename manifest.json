@@ -22,8 +22,12 @@
       "128": "icons/icon128.png"
     }
   },
-  "permissions": ["storage"],
-  "host_permissions": ["https://www.deezer.com/*", "https://api.deezer.com/*"],
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "https://www.deezer.com/*",
+    "https://api.deezer.com/*",
+    "https://deezer-bpm-sync.example.workers.dev/*"
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "{daa6e7d2-9aaf-4898-89a4-0f7224841a44}",

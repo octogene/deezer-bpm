@@ -30,6 +30,10 @@
     UNRESOLVABLE_CACHE_LAST_CLEAR_STORAGE_KEY:
       "deezerBpmUnresolvableCacheLastClear",
     MANUAL_BPM_STORAGE_KEY: "deezerBpmManualOverrides",
+    // Online-sync settings/bookkeeping: { code, autoSync, lastSyncAt,
+    // lastStatus, syncedRemoteUpdatedAt }. Only touched by the popup and
+    // background service worker (the content script never reads it).
+    SYNC_SETTINGS_KEY: "deezerBpmSync",
 
     // Special values
     COVER_PLACEHOLDER_ID: "d41d8cd98f00b204e9800998ecf8427e",

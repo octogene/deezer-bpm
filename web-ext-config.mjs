@@ -11,6 +11,8 @@ export default {
     "AGENT.md",
     "CHANGELOG.md",
     "REVIEW.md",
+    // Backend sync service — deployed to Cloudflare separately, not shipped
+    // inside the extension package.
     "worker/",
     ".github/",
     ".idea/",

@@ -570,6 +570,16 @@
         </p>
       </div>
       <div class="feature">
+        <div class="feature-icon">☁️</div>
+        <h3 data-i18n="feat_sync_title">Online sync</h3>
+        <p data-i18n="feat_sync_desc">
+          Keep your manual BPMs in sync across browsers with a private sync code
+          — no account needed. Merge both sides or mirror one onto the other,
+          and optionally auto-sync every 15 minutes. The code is the only key,
+          so keep it private.
+        </p>
+      </div>
+      <div class="feature">
         <div class="feature-icon">⚡</div>
         <h3 data-i18n="feat3_title">Instant &amp; cached</h3>
         <p data-i18n="feat3_desc">
@@ -803,6 +813,48 @@
             and reported. You can choose to merge the file with your existing
             overrides or replace them entirely, and imported values appear
             immediately without reloading the page.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_sync_q"
+            >Can I sync my manual BPMs across browsers?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n="faq_sync_short">
+            Yes. In the extension's toolbar menu, click
+            <strong>Generate</strong> to create a private sync code, then enter
+            that same code on another browser to link them. Use
+            <strong>Merge now</strong> to combine both sides, or
+            <strong>Last-write-wins now</strong> to mirror one onto the other.
+            There's no account — the sync code is all you need.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_sync_long1">
+            Your overrides are stored as the same small CSV used by export, kept
+            under a key derived from your sync code. The code is the only
+            secret: anyone who has it can read and change your BPMs, so keep it
+            private, and losing it means losing access to the synced copy. There
+            is no file encryption — the data is just track IDs and BPM numbers.
+          </p>
+          <p data-i18n="faq_sync_long2">
+            <strong>Merge</strong> combines both sides and never deletes, so
+            it's the safe choice (and the one used by the optional auto-sync
+            every 15 minutes). <strong>Last-write-wins</strong> replaces one
+            side wholesale: if the cloud copy changed since your last sync it is
+            pulled, otherwise your local copy is pushed. Because individual
+            edits aren't timestamped, Last-write-wins favours the cloud copy
+            when both sides changed — use Merge if you're unsure.
           </p>
         </div>
       </div>
@@ -1077,6 +1129,9 @@
           feat_export_title: "Import &amp; export",
           feat_export_desc:
             "Sauvegardez vos BPM saisis manuellement dans un fichier CSV depuis le menu de la barre d'outils, puis importez-les sur un autre appareil ou après une réinstallation. Les fichiers importés sont validés avant toute application.",
+          feat_sync_title: "Synchronisation en ligne",
+          feat_sync_desc:
+            "Gardez vos BPM manuels synchronisés entre navigateurs grâce à un code de synchronisation privé — sans compte. Fusionnez les deux côtés ou recopiez l'un sur l'autre, avec une synchronisation automatique toutes les 15 minutes en option. Le code est la seule clé, gardez-le privé.",
           feat3_title: "Instantané &amp; en cache",
           feat3_desc:
             "Les valeurs BPM sont mises en cache entre les sessions pour que les titres déjà consultés s'affichent instantanément, sans nouvel appel API.",
@@ -1131,6 +1186,15 @@
             "Le fichier exporté est un petit CSV avec une ligne par titre : son identifiant Deezer et votre valeur BPM. Seules vos valeurs personnalisées sont exportées — les valeurs récupérées automatiquement depuis Deezer ne sont pas incluses.",
           faq_export_long2:
             "À l'import, le fichier est validé avant tout enregistrement : il doit comporter les bonnes colonnes, chaque identifiant doit être numérique et chaque BPM doit être un nombre entier entre 1 et 999. Les lignes invalides sont ignorées et signalées. Vous pouvez choisir de fusionner le fichier avec vos valeurs existantes ou de les remplacer entièrement, et les valeurs importées apparaissent immédiatement sans recharger la page.",
+
+          faq_sync_q:
+            "Puis-je synchroniser mes BPM manuels entre navigateurs ?",
+          faq_sync_short:
+            "Oui. Dans le menu de la barre d'outils de l'extension, cliquez sur <strong>Générer</strong> pour créer un code de synchronisation privé, puis saisissez ce même code sur un autre navigateur pour les lier. Utilisez <strong>Fusionner</strong> pour combiner les deux côtés, ou <strong>Dernière écriture prioritaire</strong> pour recopier l'un sur l'autre. Aucun compte n'est requis — le code de synchronisation suffit.",
+          faq_sync_long1:
+            "Vos valeurs personnalisées sont stockées sous la forme du même petit CSV que l'export, sous une clé dérivée de votre code de synchronisation. Le code est le seul secret : quiconque le détient peut lire et modifier vos BPM, gardez-le donc privé, et le perdre signifie perdre l'accès à la copie synchronisée. Il n'y a pas de chiffrement du fichier — les données ne sont que des identifiants de titres et des nombres de BPM.",
+          faq_sync_long2:
+            "<strong>Fusionner</strong> combine les deux côtés sans jamais rien supprimer, c'est donc le choix sûr (et celui utilisé par la synchronisation automatique optionnelle toutes les 15 minutes). <strong>Dernière écriture prioritaire</strong> remplace entièrement l'un des côtés : si la copie en ligne a changé depuis votre dernière synchronisation, elle est récupérée, sinon votre copie locale est envoyée. Comme les modifications individuelles ne sont pas horodatées, cette option privilégie la copie en ligne lorsque les deux côtés ont changé — utilisez Fusionner en cas de doute.",
 
           faq_queue_diff_q:
             "Pourquoi les valeurs BPM dans la file d'attente sont-elles parfois différentes du badge ou de ce qu'elles étaient avant ?",
