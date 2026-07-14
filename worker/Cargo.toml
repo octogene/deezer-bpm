@@ -1,0 +1,20 @@
+[package]
+name = "deezer-bpm-sync"
+version = "0.1.0"
+edition = "2021"
+authors = ["Octogene"]
+description = "Cloudflare Worker that syncs the Deezer BPM manual-overrides CSV"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+worker = "0.8"
+sha2 = "0.10"
+
+[profile.release]
+# Smaller wasm binaries.
+opt-level = "s"
+lto = true
+strip = true

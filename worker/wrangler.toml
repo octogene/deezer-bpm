@@ -1,0 +1,17 @@
+# Cloudflare Worker config for the Deezer BPM sync endpoint (Rust / workers-rs).
+# Deploy with: npx wrangler deploy  (see worker/README.md)
+
+name = "deezer-bpm-sync"
+main = "build/worker/shim.mjs"
+compatibility_date = "2024-11-01"
+
+# Compile the Rust crate to wasm. worker-build is installed on demand; it emits
+# the JS shim referenced by `main` above.
+[build]
+command = "cargo install -q worker-build && worker-build --release"
+
+# R2 bucket that stores each user's overrides CSV, keyed by SHA-256(sync code).
+# Create it once with: npx wrangler r2 bucket create deezer-bpm-sync
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "deezer-bpm-sync"
