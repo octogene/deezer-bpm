@@ -37,6 +37,7 @@
       "matches": ["https://www.deezer.com/*"],
       "js": [
         "content/constants.js",
+        "content/manual-bpm.js",
         "content/utils.js",
         "content/cache.js",
         "content/api.js",

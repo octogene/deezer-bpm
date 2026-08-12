@@ -19,6 +19,8 @@
 
   const { logDebugInfo, clearUnresolvableTrackCache } = window.DeezerBpm.utils;
 
+  const { parseManualOverrides } = window.DeezerBpm.manualBpm;
+
   class LruMap extends Map {
     constructor(maxSize, entries) {
       super(entries);
@@ -163,14 +165,10 @@
         }
       }
 
-      const savedManual = cache[MANUAL_BPM_STORAGE_KEY];
-      if (savedManual && typeof savedManual === "object") {
-        for (const [id, bpmRaw] of Object.entries(savedManual)) {
-          const bpm = Number(bpmRaw);
-          if (Number.isFinite(bpm) && bpm > 0 && bpm < 1000) {
-            manualBpmCache.set(id, Math.trunc(bpm));
-          }
-        }
+      for (const [id, bpm] of parseManualOverrides(
+        cache[MANUAL_BPM_STORAGE_KEY],
+      )) {
+        manualBpmCache.set(id, bpm);
       }
     } catch (error) {
       console.warn(`${LOG_PREFIX} Could not load caches:`, error);
@@ -186,27 +184,37 @@
         [COVER_CACHE_STORAGE_KEY]: Object.fromEntries(coverCache),
         [COVER_TRACK_CACHE_STORAGE_KEY]:
           Object.fromEntries(trackResolutionCache),
-        [MANUAL_BPM_STORAGE_KEY]: Object.fromEntries(manualBpmCache),
       })
       .catch((error) => {
         console.warn(`${LOG_PREFIX} Could not persist cache:`, error);
       });
   }
 
+  // Manual overrides are edited one at a time by deliberate user action (the
+  // playlist double-click editor, or a popup import), never in a tight loop,
+  // so they get their own immediate (non-debounced) write instead of riding
+  // along on the bulkier, high-frequency auto-cache debounce above — that
+  // used to let an unrelated auto-cache save silently clobber a fresh manual
+  // edit in another tab.
+  function saveManualOverrides() {
+    logDebugInfo("[CACHE] Persisting manual overrides");
+
+    return storageApi.local
+      .set({ [MANUAL_BPM_STORAGE_KEY]: Object.fromEntries(manualBpmCache) })
+      .catch((error) => {
+        console.warn(
+          `${LOG_PREFIX} Could not persist manual overrides:`,
+          error,
+        );
+      });
+  }
+
   // Rebuilds manualBpmCache from a stored overrides object (same shape and
   // validation as loadPersistedCache). Used when the popup imports overrides and
   // writes to storage.local. Returns true only if the contents actually changed,
-  // so we ignore our own debounced persistCaches() writes.
+  // so we ignore our own writes echoed back via storage.onChanged.
   function applyManualOverridesFromStorage(rawValue) {
-    const next = new Map();
-    if (rawValue && typeof rawValue === "object") {
-      for (const [id, bpmRaw] of Object.entries(rawValue)) {
-        const bpm = Number(bpmRaw);
-        if (Number.isFinite(bpm) && bpm > 0 && bpm < 1000) {
-          next.set(id, Math.trunc(bpm));
-        }
-      }
-    }
+    const next = parseManualOverrides(rawValue);
 
     if (next.size === manualBpmCache.size) {
       let identical = true;
@@ -265,6 +273,7 @@
     scheduleSaveCache,
     flushPendingCacheSave,
     getEffectiveBpm,
+    saveManualOverrides,
     applyManualOverridesFromStorage,
   };
 })();
