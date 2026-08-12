@@ -6,17 +6,16 @@
   const storage =
     typeof browser !== "undefined" ? browser.storage : chrome.storage;
 
-  // Must match content/constants.js MANUAL_BPM_STORAGE_KEY. Content constants
-  // are not shared with the popup context, so it is duplicated here.
-  const MANUAL_BPM_STORAGE_KEY = "deezerBpmManualOverrides";
+  const { MANUAL_BPM_STORAGE_KEY, DEBUG_STORAGE_KEY } =
+    window.DeezerBpm.constants;
+  const { isValidTrackId, isValidManualBpm, parseManualOverrides } =
+    window.DeezerBpm.manualBpm;
 
   // Schema version written into (and validated from) the export file.
   const CSV_FORMAT_VERSION = 1;
   const CSV_HEADER = "track_id,bpm";
 
-  // Debug logging for the popup. Flip to false to silence. Logs appear in the
-  // Browser Console (Firefox: Ctrl+Shift+J) since the popup has no visible one.
-  const DEBUG = true;
+  const DEBUG = localStorage.getItem(DEBUG_STORAGE_KEY) === "1";
   const log = (...args) => {
     if (DEBUG) console.log("[Deezer BPM][popup]", ...args);
   };
@@ -52,16 +51,7 @@
   async function readOverrides() {
     const result = await storage.local.get(MANUAL_BPM_STORAGE_KEY);
     const raw = result[MANUAL_BPM_STORAGE_KEY];
-    const out = {};
-    if (raw && typeof raw === "object") {
-      for (const [id, bpmRaw] of Object.entries(raw)) {
-        const bpm = Number(bpmRaw);
-        if (isValidId(id) && isValidBpm(bpm)) {
-          out[id] = Math.trunc(bpm);
-        }
-      }
-    }
-    return out;
+    return Object.fromEntries(parseManualOverrides(raw));
   }
 
   async function refreshCount() {
@@ -74,16 +64,6 @@
     } catch {
       els.count.textContent = "Could not read saved BPMs.";
     }
-  }
-
-  // ── Validation helpers ──────────────────────────────────────────────────────
-
-  function isValidId(id) {
-    return /^\d+$/.test(String(id).trim());
-  }
-
-  function isValidBpm(bpm) {
-    return Number.isFinite(bpm) && bpm > 0 && bpm < 1000;
   }
 
   // ── Export ──────────────────────────────────────────────────────────────────
@@ -198,34 +178,10 @@
   }
 
   function validateAndBuild(text) {
-    // Read the format straight from the raw text so it survives whatever
-    // delimiter or quoting a spreadsheet may have re-saved the comment line with.
-    const fileFormat = readFileFormat(text);
-    log("Detected format:", fileFormat);
-    if (fileFormat !== null && fileFormat > CSV_FORMAT_VERSION) {
-      return {
-        error:
-          `This file uses format v${fileFormat}, but this version of the ` +
-          `extension only understands up to v${CSV_FORMAT_VERSION}. ` +
-          `Please update the extension.`,
-      };
-    }
-
-    const delimiter = detectDelimiter(text);
-    const rows = parseCsv(text, delimiter);
+    const { delimiter, rows } = detectDelimiterAndParse(text);
     log("Delimiter:", JSON.stringify(delimiter), "| rows parsed:", rows.length);
 
-    // Find the header: the first row that isn't blank or a comment. Comment
-    // lines are only recognised before the header, so a data cell that happens
-    // to start with "#" is never mistaken for one.
-    let headerIdx = -1;
-    for (let i = 0; i < rows.length; i++) {
-      if (isBlankRow(rows[i])) continue;
-      if ((rows[i][0] ?? "").trim().startsWith("#")) continue;
-      headerIdx = i;
-      break;
-    }
-
+    const headerIdx = findHeaderIndex(rows);
     if (headerIdx === -1) {
       return { error: "The file is empty." };
     }
@@ -243,6 +199,17 @@
       };
     }
 
+    const fileFormat = readFileFormat(rows, headerIdx);
+    log("Detected format:", fileFormat);
+    if (fileFormat !== null && fileFormat > CSV_FORMAT_VERSION) {
+      return {
+        error:
+          `This file uses format v${fileFormat}, but this version of the ` +
+          `extension only understands up to v${CSV_FORMAT_VERSION}. ` +
+          `Please update the extension.`,
+      };
+    }
+
     const valid = {};
     let skipped = 0;
 
@@ -253,8 +220,8 @@
       const id = (cells[idIdx] ?? "").trim();
       const bpm = Number((cells[bpmIdx] ?? "").trim());
 
-      if (isValidId(id) && isValidBpm(bpm)) {
-        valid[id] = Math.trunc(bpm);
+      if (isValidTrackId(id) && isValidManualBpm(bpm)) {
+        valid[id] = bpm;
       } else {
         skipped++;
         // Log the first few offenders so a whole-file rejection is explainable.
@@ -278,38 +245,59 @@
     return row.length === 1 && (row[0] ?? "").trim() === "";
   }
 
-  // Reads "format=<n>" from the first comment line (a line starting with "#"),
-  // scanning the raw text so it is independent of the delimiter.
-  function readFileFormat(text) {
-    const match = text.match(/^\uFEFF?\s*#.*?format\s*=\s*(\d+)/im);
-    return match ? Number(match[1]) : null;
+  // Finds the first row that isn't blank or a comment (a row whose first cell
+  // starts with "#", once quotes have already been stripped by parseCsv).
+  // Comment lines are only recognised before the header, so a data cell that
+  // happens to start with "#" is never mistaken for one.
+  function findHeaderIndex(rows) {
+    for (let i = 0; i < rows.length; i++) {
+      if (isBlankRow(rows[i])) continue;
+      if ((rows[i][0] ?? "").trim().startsWith("#")) continue;
+      return i;
+    }
+    return -1;
   }
 
-  // Picks the delimiter from the first meaningful (non-blank, non-comment) line.
-  // Spreadsheets in many locales save CSV with ";" (or sometimes a tab) instead
-  // of ",". The header line has no quoted delimiters, so a naive count is safe.
-  function detectDelimiter(text) {
-    for (const rawLine of text.split(/\r\n|\r|\n/)) {
-      const line = rawLine.replace(/^\uFEFF/, "").trim();
-      if (!line || line.startsWith("#")) continue;
-
-      let best = ",";
-      let bestCount = 0;
-      for (const d of [",", ";", "\t"]) {
-        const count = line.split(d).length - 1;
-        if (count > bestCount) {
-          bestCount = count;
-          best = d;
-        }
-      }
-      return best;
+  // Reads "format=<n>" from a "#..."-prefixed comment row found before the
+  // header, once parseCsv has already stripped any quoting -- unlike a raw-text
+  // regex, this can't be fooled by a spreadsheet app quoting the comment line.
+  function readFileFormat(rows, headerIdx) {
+    for (let i = 0; i < headerIdx; i++) {
+      const cell = (rows[i][0] ?? "").trim();
+      if (!cell.startsWith("#")) continue;
+      const match = cell.match(/format\s*=\s*(\d+)/i);
+      if (match) return Number(match[1]);
     }
-    return ",";
+    return null;
+  }
+
+  // Tries each candidate delimiter (comma first, since it's the extension's
+  // own export format) by fully parsing the file with the real, quote-aware
+  // parseCsv and checking whether the resulting header contains the required
+  // columns. This reuses parseCsv's quote handling instead of sniffing the
+  // delimiter from raw, possibly-quoted text, which a spreadsheet app's
+  // re-save (locales default to ";", and may quote a comment line containing
+  // literal ";" characters) could otherwise mis-detect.
+  function detectDelimiterAndParse(text) {
+    for (const delimiter of [",", ";", "\t"]) {
+      const rows = parseCsv(text, delimiter);
+      const headerIdx = findHeaderIndex(rows);
+      if (headerIdx === -1) continue;
+
+      const header = rows[headerIdx].map((h) => h.trim().toLowerCase());
+      if (header.includes("track_id") && header.includes("bpm")) {
+        return { delimiter, rows };
+      }
+    }
+
+    // No candidate produced a valid header -- fall back to comma so the
+    // existing "missing track_id/bpm header" error still surfaces.
+    return { delimiter: ",", rows: parseCsv(text, ",") };
   }
 
   // RFC-4180-style CSV parser: handles quoted fields, escaped quotes (""), a
   // leading UTF-8 BOM, and CRLF / LF / CR line endings. Delimiter is supplied by
-  // detectDelimiter so "," and ";" (and tab) files both parse.
+  // detectDelimiterAndParse so "," and ";" (and tab) files both parse.
   function parseCsv(text, delimiter) {
     if (text.charCodeAt(0) === 0xfeff) text = text.slice(1);
 

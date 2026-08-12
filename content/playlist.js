@@ -27,9 +27,11 @@
     bpmCache,
     trackResolutionCache,
     manualBpmCache,
-    scheduleSaveCache,
+    saveManualOverrides,
     getEffectiveBpm,
   } = window.DeezerBpm.cache;
+
+  const { isValidManualBpm } = window.DeezerBpm.manualBpm;
 
   const { fetchBpmCached } = window.DeezerBpm.api;
 
@@ -139,17 +141,17 @@
         const raw = input.value.trim();
         const val = Number(raw);
 
-        if (Number.isInteger(val) && val > 0 && val < 1000) {
+        if (isValidManualBpm(val)) {
           // Set or replace manual override
           done = true;
           manualBpmCache.set(trackId, val);
-          scheduleSaveCache();
+          saveManualOverrides();
           syncBpmSpans(trackId);
         } else if (raw === "" && currentManual !== undefined) {
           // Clear manual override — revert to API value
           done = true;
           manualBpmCache.delete(trackId);
-          scheduleSaveCache();
+          saveManualOverrides();
           syncBpmSpans(trackId);
         } else {
           restore();
@@ -434,6 +436,7 @@
     for (const span of document.querySelectorAll(
       `.${INLINE_CLASS}[data-dbpm-track]`,
     )) {
+      if (span.querySelector("input")) continue; // editor open — don't clobber it
       const trackId = span.dataset.dbpmTrack;
       if (!trackId) continue;
       const row = span.closest('[role="row"]') ?? null;
