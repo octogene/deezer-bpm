@@ -1,87 +1,193 @@
-# Deezer BPM sync backend (Cloudflare Worker + R2)
+# Deezer BPM sync backend (Cloudflare Worker + D1)
 
-This tiny Worker lets the extension sync a user's **manual BPM overrides** CSV
-between browsers **without accounts**. Each user gets a random *sync code*; the
-Worker stores their CSV in R2 under `SHA-256(code)`. Knowing the code lets you
-read and write that one file; that's the whole auth model.
+This Worker synchronizes manual BPM overrides between browsers without accounts.
+Each private sync code identifies one revisioned sync space in D1; only its
+SHA-256 hash is stored.
 
-It is written in **Rust** ([`workers-rs`](https://github.com/cloudflare/workers-rs))
-and compiled to WebAssembly.
+## Protocol
 
-## What it does
+`GET /activate` serves the Turnstile-protected code creation page.
+`POST /spaces` verifies its challenge and creates a server-generated code.
+Unknown codes are never created implicitly by `/sync`.
 
-- `GET /csv` — header `X-Sync-Code`. Returns the stored CSV (200) with an
-  `X-Updated-At` header (ms since epoch, R2's upload time), or `404` if none.
-- `PUT /csv` — header `X-Sync-Code`, body = CSV (≤ 256 KB). **Validates** the CSV
-  (see below), stores it, and returns `{ "updatedAt": <ms> }`.
-- Any other path/method, a malformed code, or an invalid CSV is rejected.
+`POST /sync` requires an `X-Sync-Code` header and this JSON body:
 
-### CSV validation
+```json
+{
+  "baseRevision": 4,
+  "force": false,
+  "changes": [
+    { "trackId": "123", "bpm": 128 },
+    { "trackId": "456", "bpm": null }
+  ]
+}
+```
 
-On `PUT` the body must match the extension's export format, or the request is
-rejected with `400 invalid CSV: …`:
+`bpm: null` is a deletion tombstone. The response contains a bounded page from a fixed revision snapshot:
 
-- an optional leading `#` comment line,
-- a `track_id,bpm` header row,
-- then rows of `<digits>,<bpm>` where `bpm` is an integer in `1..=999`.
+```json
+{
+  "revision": 5,
+  "throughRevision": 5,
+  "changes": [
+    { "trackId": "123", "bpm": 128, "revision": 5 },
+    { "trackId": "456", "bpm": null, "revision": 5 }
+  ],
+  "nextCursor": null
+}
+```
 
-Zero data rows is allowed (a user may have cleared all their overrides). This
-guarantees only well-formed override files ever land in R2.
+When `nextCursor` is present, send it with the original `baseRevision`,
+`throughRevision`, no changes, and `force: false`. The extension commits its new
+baseline only after every page succeeds.
+
+Normal requests apply only tracks that have not changed remotely since the
+client's baseline. The extension detects same-track conflicts, keeps those local,
+and excludes them from automatic synchronization. A user can explicitly send
+them with `force: true`.
+
+D1 executes each request as one transaction, so simultaneous browsers cannot
+partially overwrite one another.
 
 ## Prerequisites
 
-- A stable Rust toolchain (via [rustup](https://rustup.rs)).
-- The wasm target: `rustup target add wasm32-unknown-unknown`.
-- `worker-build` is installed automatically by the `[build]` command in
-  `wrangler.toml`; no manual step needed.
+- A Cloudflare account with Workers and D1.
+- A stable Rust toolchain.
+- `rustup target add wasm32-unknown-unknown`.
+- Wrangler (`npm install -g wrangler` or use `npx wrangler`).
 
-## Deploy (once)
+## Deploy with Terraform
+
+The Terraform configuration creates the D1 database, applies all SQL migrations,
+uploads the Rust and WebAssembly modules, provisions the SQLite Durable Object
+safety budget, configures rate limiting and cleanup, enables the `workers.dev`
+endpoint, and deploys the new Worker version at 100%.
+
+Create a Cloudflare API token with **Workers Scripts: Edit** and **D1: Edit**.
+Create the R2 state bucket once, then generate an R2 API token scoped to that
+bucket with **Object Read & Write** permission. R2 API tokens provide a separate
+Access Key ID and Secret Access Key for the S3-compatible backend.
+
+```sh
+export CLOUDFLARE_API_TOKEN="..."
+npx wrangler r2 bucket create deezer-bpm-terraform-state
+
+cd worker
+cargo install worker-build
+worker-build --release
+
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+cp backend.hcl.example backend.hcl
+# Set the account ID and Turnstile keys in terraform.tfvars.
+# Replace the account ID in backend.hcl.
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+terraform init -backend-config=backend.hcl
+terraform apply
+```
+
+The build must run before `terraform plan` or `terraform apply` because Terraform
+uploads `build/index.js` and `build/index_bg.wasm`. Re-run it before applying each
+code update. The D1 migration step also uses the token through Wrangler without
+writing it to Terraform configuration or state.
+
+The defaults allow 20 requests/minute per IP, 30/minute per code, five code
+creations/minute per IP, and 300 requests/minute per Cloudflare location.
+Cloudflare's edge counters are permissive and location-local. The Durable Object
+also enforces strict UTC-day admission budgets before D1.
+
+After deployment, the endpoint is
+`https://<worker_name>.<account_workers_subdomain>.workers.dev`. The release
+workflow reads it after Terraform applies the deployment and injects it into
+`SYNC_ENDPOINT` in `background.js` and `host_permissions` in `manifest.json`
+before building the extension.
+
+### Remote state
+
+Terraform stores state in the `deezer-bpm-terraform-state` R2 bucket using its
+S3-compatible API. Native S3 lock files prevent concurrent applies. Both
+`backend.hcl` and local state files are ignored by Git.
+
+For GitHub Actions, the included `deploy-worker.yml` workflow expects these
+production environment secrets:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `TURNSTILE_SITE_KEY`
+- `TURNSTILE_SECRET_KEY`
+
+The extension release workflow calls the deployment workflow first and only
+builds the extension after deployment succeeds. The deployment workflow can
+also be run manually. Configure required reviewers on the GitHub `production`
+environment if deployments need approval. The workflow generates `backend.hcl`
+on its ephemeral runner and never writes R2 credentials to the repository.
+
+If local state already exists, migrate it with:
+
+```sh
+terraform init -migrate-state -backend-config=backend.hcl
+```
+
+## Deploy with Wrangler
 
 ```sh
 cd worker
-npm install -g wrangler         # or: npx wrangler ...
 wrangler login
-wrangler r2 bucket create deezer-bpm-sync
-wrangler deploy                 # runs `worker-build --release`, then uploads
+wrangler d1 create deezer-bpm-sync
 ```
 
-`wrangler deploy` prints the Worker URL, e.g.
-`https://deezer-bpm-sync.<your-subdomain>.workers.dev`.
+Copy the returned database ID into `wrangler.toml`, replacing
+`replace-with-d1-database-id`, then apply the schema and deploy:
 
-### Point the extension at your Worker
+```sh
+wrangler d1 migrations apply DB --remote
+wrangler deploy
+```
 
-Put that URL in **two** places (they must match), then reload/repackage:
+Replace the local Turnstile test keys in `wrangler.toml` before a manual
+production deployment.
 
-1. `SYNC_ENDPOINT` in `background.js` and `popup/popup.js`.
-2. `host_permissions` in `manifest.json`
-   (`"https://deezer-bpm-sync.<your-subdomain>.workers.dev/*"`).
+Put the deployed URL in `SYNC_ENDPOINT` in `background.js` and in
+`manifest.json` under `host_permissions`.
 
 ## Local testing
 
 ```sh
-wrangler dev   # compiles the Rust crate to wasm, then serves it
-# store
-curl -X PUT localhost:8787/csv -H 'X-Sync-Code: testtesttesttest' \
-  --data $'# Deezer BPM manual overrides; format=1\r\ntrack_id,bpm\r\n123,128\r\n'
-# read back
-curl -i localhost:8787/csv -H 'X-Sync-Code: testtesttesttest'
-# a different code sees nothing
-curl -i localhost:8787/csv -H 'X-Sync-Code: someoneelsecode1'   # -> 404
-# a malformed CSV is rejected
-curl -i -X PUT localhost:8787/csv -H 'X-Sync-Code: testtesttesttest' \
-  --data $'track_id,bpm\r\n123,2000\r\n'                          # -> 400
+wrangler d1 migrations apply DB --local
+wrangler dev
 ```
 
-## Security notes / tradeoffs
+Open `http://localhost:8787/activate` to create a local test code, then use it
+with `/sync`.
 
-- **No encryption.** The CSV is stored as-is, so whoever operates this Worker/R2
-  (you) can read every user's overrides. The data is low-sensitivity
-  (`track_id,bpm`), which is why this was accepted.
-- **The sync code is the only secret.** It's 160 bits of CSPRNG randomness, so it
-  can't be guessed. Anyone who obtains a user's code can read/write that user's
-  file — treat it like a password. Losing it means losing access to the synced copy.
-- **Codes never appear in URLs**, only in the `X-Sync-Code` header, so they don't
-  leak into request logs.
-- **Abuse limits:** body is capped at 256 KB and the code shape is validated. For
-  extra protection add a Cloudflare **Rate Limiting** rule on the Worker route
-  (dashboard → Security → WAF/Rate limiting); the Worker itself is stateless.
+Run the Rust checks with:
+
+```sh
+cargo fmt --check
+cargo test
+```
+
+## Migration from the experimental R2 backend
+
+There is no server-side R2-to-D1 migration. Existing extension installations
+start with revision `0` and upload their current local overrides on first sync.
+If R2 contains the only surviving copy of some data, export it before switching
+the endpoint and import it into an updated extension.
+
+## Security and privacy
+
+- The sync code is the only credential. Generated codes contain about 125 bits
+  of randomness; anyone who obtains one can read and modify that sync space.
+- Raw codes never enter D1 or URLs. D1 stores only their SHA-256 hashes.
+- Track IDs and BPM values are not end-to-end encrypted; the Worker operator can
+  inspect them.
+- Request bodies are capped at 1 MiB and 500 changes by default.
+- Responses are paginated, spaces are capped at 5,000 tracks, and track IDs are
+  length-limited.
+- Per-IP, per-code, creation, and endpoint-wide rate limits run before D1.
+- A SQLite Durable Object protects conservative daily request and D1 budgets.
+- Empty spaces expire after seven days; inactive spaces expire after 180 days.
+- Free-plan limit exhaustion rejects requests instead of enabling paid overage.

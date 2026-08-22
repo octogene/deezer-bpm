@@ -1,12 +1,10 @@
 (function () {
   "use strict";
 
-  const storage =
-    typeof browser !== "undefined" ? browser.storage : chrome.storage;
+  const runtime =
+    typeof browser !== "undefined" ? browser.runtime : chrome.runtime;
 
-  const { MANUAL_BPM_STORAGE_KEY, DEBUG_STORAGE_KEY } =
-    window.DeezerBpm.constants;
-  const { parseManualOverrides } = window.DeezerBpm.manualBpm;
+  const { DEBUG_STORAGE_KEY } = window.DeezerBpm.constants;
   const { validateAndBuild } = window.DeezerBpm.csv;
 
   const DEBUG = localStorage.getItem(DEBUG_STORAGE_KEY) === "1";
@@ -35,12 +33,6 @@
     });
   }
 
-  async function readOverrides() {
-    const result = await storage.local.get(MANUAL_BPM_STORAGE_KEY);
-    const raw = result[MANUAL_BPM_STORAGE_KEY];
-    return Object.fromEntries(parseManualOverrides(raw));
-  }
-
   async function onImport(file) {
     els.chooseBtn.disabled = true;
     setStatus("Reading file…", "info");
@@ -64,17 +56,17 @@
       }
 
       const replaceAll = els.replaceAll.checked;
-      const existing = replaceAll ? {} : await readOverrides();
-      const merged = { ...existing, ...result.valid };
-      log("Writing overrides:", {
-        replaceAll,
-        existing: Object.keys(existing).length,
-        imported: result.imported,
-        merged: Object.keys(merged).length,
-      });
+      log("Writing overrides:", { replaceAll, imported: result.imported });
 
-      await storage.local.set({ [MANUAL_BPM_STORAGE_KEY]: merged });
-      log("storage.local.set succeeded");
+      const response = await runtime.sendMessage({
+        type: "import-manual-overrides",
+        overrides: result.valid,
+        replaceAll,
+      });
+      if (!response?.ok) {
+        throw new Error(response?.error || "manual override import failed");
+      }
+      log("Import write succeeded; total overrides:", response.count);
 
       const parts = [
         `Imported ${result.imported} manual BPM${

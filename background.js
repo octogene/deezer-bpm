@@ -9,38 +9,31 @@
   const alarms =
     typeof browser !== "undefined" ? browser.alarms : chrome.alarms;
 
-  // ── Config ───────────────────────────────────────────────────────────────
-  // Must match content/constants.js. Duplicated because the background service
-  // worker does not load the content-script constants module.
+  // These values must match content/constants.js. The background service worker
+  // does not load content-script modules.
   const MANUAL_BPM_STORAGE_KEY = "deezerBpmManualOverrides";
   const SYNC_SETTINGS_KEY = "deezerBpmSync";
 
-  // The deployed Cloudflare Worker (see worker/README.md). This URL must also be
-  // listed in manifest.json `host_permissions`. Replace with your own after
-  // `wrangler deploy`; the same literal is duplicated in popup/popup.js.
-  const SYNC_ENDPOINT = "https://deezer-bpm-sync.example.workers.dev";
-
+  // Replace this after deploying the Worker; the host must also be present in
+  // manifest.json `host_permissions`.
+  const SYNC_ENDPOINT = "https://deezer-bpm-sync.ooctogene.workers.dev";
   const SYNC_ALARM_NAME = "deezerBpmAutoSync";
   const SYNC_INTERVAL_MIN = 15;
-
-  // Schema for the synced CSV — kept identical to the popup export format.
-  const CSV_FORMAT_VERSION = 1;
-  const CSV_HEADER = "track_id,bpm";
+  const MAX_SYNC_PAGES = 20;
 
   const DEBUG = true;
   const log = (...args) => {
     if (DEBUG) console.log("[Deezer BPM][bg]", ...args);
   };
 
-  // ── What's-new tab on update (unchanged) ───────────────────────────────────
+  let operationQueue = Promise.resolve();
+
   runtime.onInstalled.addListener(({ reason, previousVersion }) => {
     reconfigureAlarm();
 
     if (reason !== "update") return;
 
     const current = runtime.getManifest().version;
-
-    // Only open the page if the major or minor version changed
     const prev = (previousVersion ?? "").split(".");
     const curr = current.split(".");
     if (prev[0] === curr[0] && prev[1] === curr[1]) return;
@@ -48,196 +41,502 @@
     tabs.create({ url: runtime.getURL("docs/whatsnew/index.html") });
   });
 
-  // ── Validation (matches popup/content) ──────────────────────────────────────
   function isValidId(id) {
     return /^\d+$/.test(String(id).trim());
   }
 
   function isValidBpm(bpm) {
-    return Number.isFinite(bpm) && bpm > 0 && bpm < 1000;
+    return Number.isInteger(bpm) && bpm > 0 && bpm < 1000;
   }
 
-  // ── Storage helpers ─────────────────────────────────────────────────────────
-  async function readOverrides() {
-    const result = await storage.local.get(MANUAL_BPM_STORAGE_KEY);
-    const raw = result[MANUAL_BPM_STORAGE_KEY];
-    const out = {};
-    if (raw && typeof raw === "object") {
-      for (const [id, bpmRaw] of Object.entries(raw)) {
-        const bpm = Number(bpmRaw);
-        if (isValidId(id) && isValidBpm(bpm)) out[id] = Math.trunc(bpm);
+  function normalizeOverrides(raw) {
+    const result = {};
+    if (!raw || typeof raw !== "object") return result;
+
+    for (const [id, bpmRaw] of Object.entries(raw)) {
+      const bpm = Number(bpmRaw);
+      if (isValidId(id) && isValidBpm(bpm)) {
+        result[String(id).trim()] = bpm;
       }
     }
-    return out;
+    return result;
   }
 
-  function writeOverrides(map) {
-    // Writing this key triggers the content script's storage.onChanged listener
-    // (content/main.js), so a pull reflects on the page with no reload.
-    return storage.local.set({ [MANUAL_BPM_STORAGE_KEY]: map });
+  function normalizeConflictValue(value) {
+    if (value === null) return null;
+    const bpm = Number(value);
+    return isValidBpm(bpm) ? bpm : undefined;
+  }
+
+  function normalizeConflicts(raw) {
+    const result = {};
+    if (!raw || typeof raw !== "object") return result;
+
+    for (const [id, conflict] of Object.entries(raw)) {
+      if (!isValidId(id) || !conflict || typeof conflict !== "object") continue;
+      const local = normalizeConflictValue(conflict.local);
+      const remote = normalizeConflictValue(conflict.remote);
+      if (local !== undefined && remote !== undefined && local !== remote) {
+        result[id] = { local, remote };
+      }
+    }
+    return result;
+  }
+
+  async function readOverrides() {
+    const result = await storage.local.get(MANUAL_BPM_STORAGE_KEY);
+    return normalizeOverrides(result[MANUAL_BPM_STORAGE_KEY]);
   }
 
   async function readSettings() {
     const result = await storage.local.get(SYNC_SETTINGS_KEY);
-    const s = result[SYNC_SETTINGS_KEY];
+    const stored = result[SYNC_SETTINGS_KEY];
+    const settings =
+      stored && typeof stored === "object" && !Array.isArray(stored)
+        ? stored
+        : {};
+
     return {
       code: "",
+      syncEnabled: true,
       autoSync: false,
       lastSyncAt: 0,
       lastStatus: "",
-      syncedRemoteUpdatedAt: 0,
-      ...(s && typeof s === "object" ? s : {}),
+      syncStateCode: "",
+      ...settings,
+      syncRevision:
+        Number.isInteger(settings.syncRevision) && settings.syncRevision >= 0
+          ? settings.syncRevision
+          : 0,
+      syncBaseline: normalizeOverrides(settings.syncBaseline),
+      syncConflicts: normalizeConflicts(settings.syncConflicts),
     };
   }
 
-  async function patchSettings(patch) {
+  async function patchSettingsForCode(code, patch) {
     const current = await readSettings();
+    if ((current.code || "").trim() !== code) return current;
+
     const next = { ...current, ...patch };
     await storage.local.set({ [SYNC_SETTINGS_KEY]: next });
     return next;
   }
 
-  // ── CSV codec (minimal — we only ever parse files we wrote) ──────────────────
-  function buildCsv(map) {
-    const version = runtime.getManifest().version;
-    const lines = [
-      `# Deezer BPM manual overrides; format=${CSV_FORMAT_VERSION}; extension=${version}`,
-      CSV_HEADER,
-    ];
-    for (const [id, bpm] of Object.entries(map)) lines.push(`${id},${bpm}`);
-    return lines.join("\r\n") + "\r\n";
+  function mapValue(map, id) {
+    return Object.hasOwn(map, id) ? map[id] : null;
   }
 
-  function parseCsv(text) {
-    const out = {};
-    for (const rawLine of text.split(/\r\n|\r|\n/)) {
-      const line = rawLine.replace(/^\uFEFF/, "").trim();
-      if (!line || line.startsWith("#")) continue;
-      if (line.toLowerCase().startsWith("track_id")) continue; // header row
-      const [idRaw, bpmRaw] = line.split(",");
-      const id = (idRaw ?? "").trim();
-      const bpm = Number((bpmRaw ?? "").trim());
-      if (isValidId(id) && isValidBpm(bpm)) out[id] = Math.trunc(bpm);
+  function setMapValue(map, id, value) {
+    if (value === null) {
+      delete map[id];
+    } else {
+      map[id] = value;
     }
-    return out;
   }
 
-  // ── Network ──────────────────────────────────────────────────────────────────
-  // Returns { map, remoteUpdatedAt } or null (no remote file yet).
-  async function pullRemote(code) {
-    const res = await fetch(`${SYNC_ENDPOINT}/csv`, {
-      method: "GET",
-      headers: { "X-Sync-Code": code },
-    });
-    if (res.status === 404) return null;
-    if (!res.ok) throw new Error(`pull failed (HTTP ${res.status})`);
-    const text = await res.text();
-    const remoteUpdatedAt = Number(res.headers.get("X-Updated-At")) || 0;
-    return { map: parseCsv(text), remoteUpdatedAt };
+  function changedIds(a, b) {
+    const result = new Set();
+    for (const id of new Set([...Object.keys(a), ...Object.keys(b)])) {
+      if (mapValue(a, id) !== mapValue(b, id)) result.add(id);
+    }
+    return result;
   }
 
-  // Uploads the map and returns the new remoteUpdatedAt (server clock).
-  async function pushRemote(code, map) {
-    const res = await fetch(`${SYNC_ENDPOINT}/csv`, {
-      method: "PUT",
-      headers: { "X-Sync-Code": code, "Content-Type": "text/csv" },
-      body: buildCsv(map),
-    });
-    if (!res.ok) throw new Error(`push failed (HTTP ${res.status})`);
-    const data = await res.json().catch(() => ({}));
-    return Number(data.updatedAt) || Date.now();
-  }
+  function buildClientChanges(baseline, local, conflicts, force) {
+    const changes = [];
+    const sentIds = new Set();
 
-  function sameMap(a, b) {
-    const ak = Object.keys(a);
-    if (ak.length !== Object.keys(b).length) return false;
-    for (const k of ak) if (a[k] !== b[k]) return false;
-    return true;
-  }
-
-  // ── Sync engine ──────────────────────────────────────────────────────────────
-  async function syncNow(mode) {
-    const settings = await readSettings();
-    const code = (settings.code || "").trim();
-    if (!code) return { ok: false, error: "No sync code set." };
-
-    try {
-      const local = await readOverrides();
-      const remote = await pullRemote(code);
-      const remoteMap = remote ? remote.map : {};
-
-      let direction;
-      let finalLocal = local;
-      let remoteUpdatedAt = remote ? remote.remoteUpdatedAt : 0;
-
-      if (mode === "lww") {
-        if (!remote) {
-          // Nothing remote yet — seed it from local.
-          remoteUpdatedAt = await pushRemote(code, local);
-          direction = "push";
-        } else if (
-          remote.remoteUpdatedAt > (settings.syncedRemoteUpdatedAt || 0)
-        ) {
-          // Remote changed since our last sync → remote wins (wholesale).
-          finalLocal = remoteMap;
-          if (!sameMap(finalLocal, local)) await writeOverrides(finalLocal);
-          direction = "pull";
-        } else {
-          // Remote unchanged since last sync → local wins (wholesale).
-          remoteUpdatedAt = await pushRemote(code, local);
-          direction = "push";
-        }
-      } else {
-        // merge (default, and always used by auto-sync): union, local wins on
-        // key conflict. Never deletes → deletions don't propagate.
-        const merged = { ...remoteMap, ...local };
-        finalLocal = merged;
-        if (!sameMap(merged, local)) await writeOverrides(merged);
-        if (!remote || !sameMap(merged, remoteMap)) {
-          remoteUpdatedAt = await pushRemote(code, merged);
-        }
-        direction = "merge";
+    for (const id of changedIds(baseline, local)) {
+      const localValue = mapValue(local, id);
+      const blocked = conflicts[id];
+      if (
+        !force &&
+        blocked &&
+        blocked.local === localValue &&
+        blocked.remote === mapValue(baseline, id)
+      ) {
+        continue;
       }
 
-      const lastSyncAt = Date.now();
-      await patchSettings({
-        lastSyncAt,
-        lastStatus: "ok",
-        syncedRemoteUpdatedAt: remoteUpdatedAt,
-      });
+      changes.push({ trackId: id, bpm: localValue });
+      sentIds.add(id);
+    }
 
-      log("sync ok", {
-        mode,
-        direction,
-        count: Object.keys(finalLocal).length,
-      });
-      return {
-        ok: true,
-        mode,
-        direction,
-        count: Object.keys(finalLocal).length,
-        lastSyncAt,
-      };
-    } catch (error) {
-      const message = error?.message || String(error);
-      await patchSettings({ lastStatus: `error: ${message}` });
-      console.warn("[Deezer BPM][bg] sync failed:", error);
-      return { ok: false, error: message };
+    return { changes, sentIds };
+  }
+
+  // Carries the Worker's machine-readable error code so callers can react to a
+  // specific failure instead of matching on message text.
+  class SyncError extends Error {
+    constructor(message, code, retryAfter) {
+      super(message);
+      this.name = "SyncError";
+      this.code = code || "";
+      this.retryAfter = retryAfter || 0;
     }
   }
 
-  // ── Messaging (popup → background) ────────────────────────────────────────────
+  async function requestSync(code, baseRevision, changes, force) {
+    let cursor = null;
+    let throughRevision = null;
+    let capacityExceeded = false;
+    const serverChanges = [];
+
+    for (let page = 0; page < MAX_SYNC_PAGES; page++) {
+      const response = await fetch(`${SYNC_ENDPOINT}/sync`, {
+        method: "POST",
+        headers: {
+          "X-Sync-Code": code,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          baseRevision,
+          force: cursor ? false : force,
+          changes: cursor ? [] : changes,
+          ...(cursor ? { cursor, throughRevision } : {}),
+        }),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const retryAfter = Number(response.headers.get("Retry-After")) || 0;
+        const messages = {
+          sync_space_not_found:
+            "This sync code is not active. Create a new code.",
+          rate_limited: retryAfter
+            ? `Too many sync requests. Try again in ${retryAfter} seconds.`
+            : "Too many sync requests. Try again later.",
+          safety_budget_exhausted:
+            "Daily sync safety limit reached. Try again tomorrow.",
+          revision_ahead: "Local sync state is ahead of the server.",
+        };
+        throw new SyncError(
+          messages[data.code] ||
+            data.error ||
+            `sync failed (HTTP ${response.status})`,
+          data.code,
+          retryAfter,
+        );
+      }
+
+      if (
+        !Number.isInteger(data.revision) ||
+        data.revision < baseRevision ||
+        data.throughRevision !== data.revision ||
+        !Array.isArray(data.changes) ||
+        (data.nextCursor !== null &&
+          data.nextCursor !== undefined &&
+          typeof data.nextCursor !== "string")
+      ) {
+        throw new Error("sync server returned an invalid response");
+      }
+
+      if (throughRevision === null) {
+        throughRevision = data.throughRevision;
+        // Only the first page can carry a write, so this flag is only
+        // meaningful there.
+        capacityExceeded = data.capacityExceeded === true;
+      } else if (data.throughRevision !== throughRevision) {
+        throw new Error("sync server changed revision during pagination");
+      }
+
+      serverChanges.push(...data.changes);
+      if (!data.nextCursor) {
+        return {
+          revision: throughRevision,
+          changes: serverChanges,
+          capacityExceeded,
+        };
+      }
+      cursor = data.nextCursor;
+    }
+
+    throw new Error("sync response exceeded the pagination limit");
+  }
+
+  // Returns the rebuilt server baseline plus the set of track IDs the delta
+  // actually carried. A track we uploaded but that is absent from the delta was
+  // not applied by the server — see reconcileSync.
+  function applyServerChanges(baseline, changes) {
+    const result = { ...baseline };
+    const appliedIds = new Set();
+
+    for (const change of changes) {
+      const id = String(change?.trackId ?? "").trim();
+      const bpm = change?.bpm === null ? null : Number(change?.bpm);
+      if (!isValidId(id) || (bpm !== null && !isValidBpm(bpm))) {
+        throw new Error("sync server returned an invalid track change");
+      }
+      setMapValue(result, id, bpm);
+      appliedIds.add(id);
+    }
+
+    return { serverBaseline: result, appliedIds };
+  }
+
+  function reconcileSync({
+    baseline,
+    requestLocal,
+    latestLocal,
+    serverBaseline,
+    appliedIds,
+    previousConflicts,
+    sentIds,
+    force,
+  }) {
+    const finalLocal = {};
+    const conflicts = {};
+    const ids = new Set([
+      ...Object.keys(baseline),
+      ...Object.keys(requestLocal),
+      ...Object.keys(latestLocal),
+      ...Object.keys(serverBaseline),
+      ...Object.keys(previousConflicts),
+    ]);
+
+    for (const id of ids) {
+      const baseValue = mapValue(baseline, id);
+      const requestValue = mapValue(requestLocal, id);
+      const latestValue = mapValue(latestLocal, id);
+      const serverValue = mapValue(serverBaseline, id);
+      const previousConflict = previousConflicts[id];
+      const editedDuringSync = latestValue !== requestValue;
+
+      const newConflict =
+        !force &&
+        sentIds.has(id) &&
+        requestValue !== baseValue &&
+        serverValue !== baseValue &&
+        requestValue !== serverValue;
+
+      const blockedConflict =
+        !force &&
+        previousConflict &&
+        requestValue === previousConflict.local &&
+        baseValue === previousConflict.remote;
+
+      // A track the server accepted always comes back in the delta, because
+      // applying it advances the revision past our baseline. So an uploaded
+      // track that is missing from the delta was rejected — the space is at its
+      // row cap, or it lost a race. Keep the local value and let the next sync
+      // retry it, instead of resetting to the baseline and silently discarding
+      // the user's edit.
+      const notApplied = sentIds.has(id) && !appliedIds.has(id);
+
+      let resolvedValue = serverValue;
+      if (newConflict || blockedConflict) {
+        resolvedValue = requestValue;
+        conflicts[id] = {
+          local: requestValue,
+          remote: serverValue,
+        };
+      } else if (notApplied) {
+        resolvedValue = requestValue;
+      }
+
+      if (editedDuringSync) {
+        resolvedValue = latestValue;
+        delete conflicts[id];
+      }
+
+      setMapValue(finalLocal, id, resolvedValue);
+    }
+
+    return { finalLocal, conflicts };
+  }
+
+  // One synchronization attempt against a given local baseline/revision.
+  async function attemptSync(mode, code, state) {
+    const force = mode === "lww";
+    const { baseline, baseRevision, previousConflicts } = state;
+
+    const requestLocal = await readOverrides();
+    const { changes, sentIds } = buildClientChanges(
+      baseline,
+      requestLocal,
+      previousConflicts,
+      force,
+    );
+    const response = await requestSync(code, baseRevision, changes, force);
+    const { serverBaseline, appliedIds } = applyServerChanges(
+      baseline,
+      response.changes,
+    );
+
+    const latestSettings = await readSettings();
+    if ((latestSettings.code || "").trim() !== code) {
+      throw new Error("sync code changed while synchronization was running");
+    }
+
+    const latestLocal = await readOverrides();
+    const { finalLocal, conflicts } = reconcileSync({
+      baseline,
+      requestLocal,
+      latestLocal,
+      serverBaseline,
+      appliedIds,
+      previousConflicts,
+      sentIds,
+      force,
+    });
+
+    const lastSyncAt = Date.now();
+    const conflictCount = Object.keys(conflicts).length;
+    const statusParts = [];
+    if (conflictCount) statusParts.push(`conflict: ${conflictCount}`);
+    if (response.capacityExceeded) statusParts.push("space full");
+    const nextSettings = {
+      ...latestSettings,
+      syncStateCode: code,
+      syncRevision: response.revision,
+      syncBaseline: serverBaseline,
+      syncConflicts: conflicts,
+      lastSyncAt,
+      lastStatus: statusParts.length ? statusParts.join(", ") : "ok",
+    };
+
+    await storage.local.set({
+      [MANUAL_BPM_STORAGE_KEY]: finalLocal,
+      [SYNC_SETTINGS_KEY]: nextSettings,
+    });
+
+    log("sync ok", {
+      mode,
+      revision: response.revision,
+      sent: changes.length,
+      received: response.changes.length,
+      conflicts: conflictCount,
+      capacityExceeded: response.capacityExceeded,
+    });
+    return {
+      ok: true,
+      mode,
+      direction: "merge",
+      count: Object.keys(finalLocal).length,
+      conflicts: conflictCount,
+      capacityExceeded: response.capacityExceeded === true,
+      lastSyncAt,
+    };
+  }
+
+  async function runSync(mode) {
+    const initialSettings = await readSettings();
+    if (initialSettings.syncEnabled === false) {
+      return { ok: false, error: "Sync is disabled." };
+    }
+    const code = (initialSettings.code || "").trim();
+    if (!code) return { ok: false, error: "No sync code set." };
+
+    const stateMatchesCode = initialSettings.syncStateCode === code;
+    const state = {
+      baseline: stateMatchesCode ? initialSettings.syncBaseline : {},
+      baseRevision: stateMatchesCode ? initialSettings.syncRevision : 0,
+      previousConflicts: stateMatchesCode ? initialSettings.syncConflicts : {},
+    };
+
+    try {
+      return await attemptSync(mode, code, state);
+    } catch (error) {
+      // The server has no record of a revision we think we already hold — the
+      // space was restored from a backup, or recreated. Without this, the client
+      // stays wedged forever: it never lowers its own revision on its own.
+      // Re-running from revision 0 rebuilds the baseline from the server and
+      // keeps local values that are missing remotely.
+      if (error?.code === "revision_ahead") {
+        log("server revision is behind local state; resyncing from scratch");
+        try {
+          return await attemptSync(mode, code, {
+            baseline: {},
+            baseRevision: 0,
+            previousConflicts: {},
+          });
+        } catch (retryError) {
+          return await failSync(code, retryError);
+        }
+      }
+      return await failSync(code, error);
+    }
+  }
+
+  async function failSync(code, error) {
+    const message = error?.message || String(error);
+    await patchSettingsForCode(code, { lastStatus: `error: ${message}` });
+    console.warn("[Deezer BPM][bg] sync failed:", error);
+    return { ok: false, error: message, code: error?.code || "" };
+  }
+
+  function enqueueOperation(callback) {
+    const operation = operationQueue.then(callback);
+    operationQueue = operation.catch(() => {});
+    return operation;
+  }
+
+  function syncNow(mode) {
+    return enqueueOperation(() => runSync(mode));
+  }
+
+  async function setManualOverride(trackId, bpm) {
+    const id = String(trackId ?? "").trim();
+    if (!isValidId(id) || (bpm !== null && !isValidBpm(bpm))) {
+      return { ok: false, error: "Invalid manual BPM update." };
+    }
+
+    const overrides = await readOverrides();
+    setMapValue(overrides, id, bpm);
+    await storage.local.set({ [MANUAL_BPM_STORAGE_KEY]: overrides });
+    return { ok: true };
+  }
+
+  async function importManualOverrides(rawOverrides, replaceAll) {
+    const imported = normalizeOverrides(rawOverrides);
+    const inputCount =
+      rawOverrides && typeof rawOverrides === "object"
+        ? Object.keys(rawOverrides).length
+        : 0;
+    if (Object.keys(imported).length !== inputCount) {
+      return { ok: false, error: "Invalid manual BPM import." };
+    }
+
+    const existing = replaceAll ? {} : await readOverrides();
+    const merged = { ...existing, ...imported };
+    await storage.local.set({ [MANUAL_BPM_STORAGE_KEY]: merged });
+    return { ok: true, count: Object.keys(merged).length };
+  }
+
   runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (!msg || msg.type !== "sync") return false;
-    syncNow(msg.mode === "lww" ? "lww" : "merge").then(sendResponse);
-    return true; // keep the channel open for the async response
+    if (!msg) return false;
+
+    let operation;
+    if (msg.type === "sync") {
+      operation = syncNow(msg.mode === "lww" ? "lww" : "merge");
+    } else if (msg.type === "open-sync-activation") {
+      operation = tabs
+        .create({ url: `${SYNC_ENDPOINT}/activate` })
+        .then(() => ({ ok: true }));
+    } else if (msg.type === "set-manual-override") {
+      operation = enqueueOperation(() =>
+        setManualOverride(msg.trackId, msg.bpm),
+      );
+    } else if (msg.type === "import-manual-overrides") {
+      operation = enqueueOperation(() =>
+        importManualOverrides(msg.overrides, !!msg.replaceAll),
+      );
+    } else {
+      return false;
+    }
+
+    operation
+      .then(sendResponse)
+      .catch((error) =>
+        sendResponse({ ok: false, error: error?.message || String(error) }),
+      );
+    return true;
   });
 
-  // ── Auto-sync alarm ────────────────────────────────────────────────────────
   async function reconfigureAlarm() {
     try {
-      const { code, autoSync } = await readSettings();
-      if (autoSync && code) {
+      const { code, syncEnabled, autoSync } = await readSettings();
+      if (syncEnabled !== false && autoSync && code) {
         alarms.create(SYNC_ALARM_NAME, { periodInMinutes: SYNC_INTERVAL_MIN });
         log("auto-sync alarm armed");
       } else {
@@ -253,11 +552,22 @@
     if (alarm.name === SYNC_ALARM_NAME) syncNow("merge");
   });
 
-  // Re-arm when the popup changes the sync settings (code / auto-sync toggle).
   storage.onChanged.addListener((changes, area) => {
     if (area === "local" && changes[SYNC_SETTINGS_KEY]) reconfigureAlarm();
   });
 
-  // Set up on service-worker startup too (onInstalled won't fire on every wake).
+  // The merge/conflict helpers above are pure functions and hold the trickiest
+  // logic in the extension, so tests/merge.test.mjs drives them directly. This
+  // is the background context's own global scope — nothing on a web page can
+  // reach it.
+  globalThis.DeezerBpmSyncInternals = {
+    buildClientChanges,
+    applyServerChanges,
+    reconcileSync,
+    normalizeOverrides,
+    normalizeConflicts,
+    changedIds,
+  };
+
   reconfigureAlarm();
 })();

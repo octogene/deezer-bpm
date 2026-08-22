@@ -27,7 +27,7 @@
     bpmCache,
     trackResolutionCache,
     manualBpmCache,
-    saveManualOverrides,
+    saveManualOverride,
     getEffectiveBpm,
   } = window.DeezerBpm.cache;
 
@@ -145,13 +145,13 @@
           // Set or replace manual override
           done = true;
           manualBpmCache.set(trackId, val);
-          saveManualOverrides();
+          saveManualOverride(trackId, val);
           syncBpmSpans(trackId);
         } else if (raw === "" && currentManual !== undefined) {
           // Clear manual override — revert to API value
           done = true;
           manualBpmCache.delete(trackId);
-          saveManualOverrides();
+          saveManualOverride(trackId, null);
           syncBpmSpans(trackId);
         } else {
           restore();

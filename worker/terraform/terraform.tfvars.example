@@ -1,0 +1,13 @@
+cloudflare_account_id = "replace-with-cloudflare-account-id"
+turnstile_site_key    = "replace-with-turnstile-site-key"
+turnstile_secret_key  = "replace-with-turnstile-secret-key"
+
+# Optional:
+# worker_name   = "deezer-bpm-sync"
+# database_name = "deezer-bpm-sync"
+# d1_location   = "weur"
+#
+# The namespace ID must be unique among rate-limit bindings in the account.
+# rate_limit_namespace_id = "1001"
+# rate_limit_requests     = 20
+# rate_limit_period       = 60

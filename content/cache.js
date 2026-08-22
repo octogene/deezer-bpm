@@ -63,6 +63,8 @@
     typeof browser !== "undefined" && browser.storage
       ? browser.storage
       : chrome.storage;
+  const runtimeApi =
+    typeof browser !== "undefined" ? browser.runtime : chrome.runtime;
 
   let saveDebounce = null;
 
@@ -196,11 +198,20 @@
   // along on the bulkier, high-frequency auto-cache debounce above — that
   // used to let an unrelated auto-cache save silently clobber a fresh manual
   // edit in another tab.
-  function saveManualOverrides() {
+  function saveManualOverride(trackId, bpm) {
     logDebugInfo("[CACHE] Persisting manual overrides");
 
-    return storageApi.local
-      .set({ [MANUAL_BPM_STORAGE_KEY]: Object.fromEntries(manualBpmCache) })
+    return runtimeApi
+      .sendMessage({
+        type: "set-manual-override",
+        trackId,
+        bpm,
+      })
+      .then((response) => {
+        if (!response?.ok) {
+          throw new Error(response?.error || "manual override write failed");
+        }
+      })
       .catch((error) => {
         console.warn(
           `${LOG_PREFIX} Could not persist manual overrides:`,
@@ -273,7 +284,7 @@
     scheduleSaveCache,
     flushPendingCacheSave,
     getEffectiveBpm,
-    saveManualOverrides,
+    saveManualOverride,
     applyManualOverridesFromStorage,
   };
 })();

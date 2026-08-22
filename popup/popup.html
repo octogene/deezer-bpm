@@ -34,21 +34,25 @@
       <input
         type="text"
         id="sync-code"
-        placeholder="Paste a code, or Generate one"
+        placeholder="Paste a code, or Create one"
         autocomplete="off"
         autocapitalize="off"
         spellcheck="false"
       />
       <div class="sync-actions">
-        <button id="generate-btn" type="button">Generate</button>
+        <button id="generate-btn" type="button">Create</button>
         <button id="copy-btn" type="button">Copy</button>
       </div>
+      <label class="replace-row">
+        <input type="checkbox" id="sync-enabled" />
+        Sync enabled
+      </label>
       <label class="replace-row">
         <input type="checkbox" id="auto-sync" />
         Auto-sync every 15 minutes
       </label>
       <button id="merge-btn" type="button">Merge now</button>
-      <button id="lww-btn" type="button">Last-write-wins now</button>
+      <button id="lww-btn" type="button">Use local changes</button>
       <p class="sync-info" id="sync-info"></p>
     </div>
 

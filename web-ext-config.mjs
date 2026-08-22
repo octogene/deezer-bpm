@@ -14,11 +14,17 @@ export default {
     // Backend sync service — deployed to Cloudflare separately, not shipped
     // inside the extension package.
     "worker/",
+    "scripts/",
+    "tests/",
     ".github/",
     ".idea/",
     "web-ext-config.mjs",
     "eslint.config.mjs",
     "package.json",
     "package-lock.json",
+    // Repo-level notes and tooling, not extension resources. README.md is
+    // listed above; docs/whatsnew/ is deliberately kept.
+    "*.md",
+    "cliff.toml",
   ],
 };

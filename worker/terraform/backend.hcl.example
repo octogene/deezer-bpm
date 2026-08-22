@@ -1,0 +1,5 @@
+bucket = "deezer-bpm-terraform-state"
+
+endpoints = {
+  s3 = "https://replace-with-cloudflare-account-id.r2.cloudflarestorage.com"
+}

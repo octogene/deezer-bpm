@@ -1,0 +1,79 @@
+# Wrangler config used only by tests/worker.test.mjs (`npm run test:worker`).
+#
+# Same bindings as wrangler.toml, but with the edge rate limits raised out of the
+# way and the size limits lowered so a handful of rows exercises pagination and
+# the per-space row cap. Never deploy this file.
+
+name = "deezer-bpm-sync-test"
+main = "build/worker/shim.mjs"
+compatibility_date = "2024-11-01"
+
+[build]
+command = "worker-build --release"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "deezer-bpm-sync"
+database_id = "replace-with-d1-database-id"
+migrations_dir = "migrations"
+
+[vars]
+# Deliberately tiny: 2 rows/page makes multi-page deltas reachable, and a 4-row
+# space cap makes the capacityExceeded path testable.
+MAX_CHANGES = "10"
+MAX_DELTA_ROWS = "2"
+MAX_TRACKS_PER_SPACE = "4"
+MAX_TRACK_ID_LENGTH = "20"
+DAILY_REQUEST_BUDGET = "100000"
+DAILY_CREATION_BUDGET = "10000"
+DAILY_READ_ROW_BUDGET = "1000000"
+DAILY_WRITE_ROW_BUDGET = "1000000"
+EMPTY_SPACE_RETENTION_DAYS = "7"
+INACTIVE_SPACE_RETENTION_DAYS = "180"
+CLEANUP_BATCH_SIZE = "100"
+# Cloudflare's always-passing Turnstile test keys.
+TURNSTILE_SITE_KEY = "1x00000000000000000000AA"
+TURNSTILE_SECRET_KEY = "1x0000000000000000000000000000000AA"
+
+[[durable_objects.bindings]]
+name = "SAFETY_BUDGET"
+class_name = "SafetyBudget"
+
+[exports.SafetyBudget]
+type = "durable-object"
+storage = "sqlite"
+
+# The production limiter values are covered by tests/limits.test.mjs, which runs
+# against wrangler.toml. Here they are raised so they do not throttle the
+# protocol tests.
+[[ratelimits]]
+name = "IP_RATE_LIMITER"
+namespace_id = "2001"
+
+[ratelimits.simple]
+limit = 10000
+period = 60
+
+[[ratelimits]]
+name = "CODE_RATE_LIMITER"
+namespace_id = "2002"
+
+[ratelimits.simple]
+limit = 10000
+period = 60
+
+[[ratelimits]]
+name = "CREATE_RATE_LIMITER"
+namespace_id = "2003"
+
+[ratelimits.simple]
+limit = 10000
+period = 60
+
+[[ratelimits]]
+name = "GLOBAL_RATE_LIMITER"
+namespace_id = "2004"
+
+[ratelimits.simple]
+limit = 10000
+period = 60

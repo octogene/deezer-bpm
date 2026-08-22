@@ -4,3 +4,6 @@ icons
 screenshots
 docs/*.png
 docs/*.jpg
+
+# Local agent instructions, not project content.
+AGENT.md

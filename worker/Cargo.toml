@@ -3,18 +3,24 @@ name = "deezer-bpm-sync"
 version = "0.1.0"
 edition = "2021"
 authors = ["Octogene"]
-description = "Cloudflare Worker that syncs the Deezer BPM manual-overrides CSV"
+description = "Cloudflare Worker that syncs Deezer BPM manual overrides through D1"
 license = "MIT"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-worker = "0.8"
+base64 = "0.22"
+getrandom = { version = "0.2", features = ["js"] }
+worker = { version = "0.8", features = ["d1"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 sha2 = "0.10"
+urlencoding = "2"
 
 [profile.release]
 # Smaller wasm binaries.
 opt-level = "s"
 lto = true
-strip = true
+# worker-build's wasm-opt pass handles stripping. Cargo `strip = true` removes
+# the target_features section required by wasm-bindgen catch wrappers.

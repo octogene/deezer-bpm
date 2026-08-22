@@ -26,6 +26,7 @@
       syncCode: document.getElementById("sync-code"),
       generateBtn: document.getElementById("generate-btn"),
       copyBtn: document.getElementById("copy-btn"),
+      syncEnabled: document.getElementById("sync-enabled"),
       autoSync: document.getElementById("auto-sync"),
       mergeBtn: document.getElementById("merge-btn"),
       lwwBtn: document.getElementById("lww-btn"),
@@ -39,6 +40,9 @@
     els.copyBtn.addEventListener("click", onCopyCode);
     els.syncCode.addEventListener("change", () =>
       saveSyncSettings({ code: normalizeCode(els.syncCode.value) }),
+    );
+    els.syncEnabled.addEventListener("change", () =>
+      saveSyncSettings({ syncEnabled: els.syncEnabled.checked }),
     );
     els.autoSync.addEventListener("change", () =>
       saveSyncSettings({ autoSync: els.autoSync.checked }),
@@ -126,22 +130,6 @@
 
   // ── Sync ──────────────────────────────────────────────────────────────────
 
-  // Crockford-ish base32 (no I/L/O/0/1) so codes are easy to read and retype.
-  // 25 chars => ~125 bits of entropy; grouped in fives with dashes.
-  const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-
-  function generateCode() {
-    const bytes = new Uint8Array(25);
-    crypto.getRandomValues(bytes);
-    let out = "";
-    for (let i = 0; i < bytes.length; i++) {
-      if (i > 0 && i % 5 === 0) out += "-";
-      // 256 is a multiple of 32, so masking the low 5 bits is bias-free.
-      out += CODE_ALPHABET[bytes[i] & 31];
-    }
-    return out;
-  }
-
   // Uppercase and strip whitespace; keep the alphabet + dashes the Worker allows.
   function normalizeCode(raw) {
     return String(raw || "")
@@ -151,10 +139,15 @@
   }
 
   async function onGenerateCode() {
-    const code = generateCode();
-    els.syncCode.value = code;
-    await saveSyncSettings({ code });
-    setStatus("New sync code generated. Copy it to your other browsers.", "ok");
+    const result = await runtime.sendMessage({ type: "open-sync-activation" });
+    if (!result?.ok) {
+      setStatus(
+        `Could not open code creation: ${result?.error || "unknown error"}`,
+        "err",
+      );
+      return;
+    }
+    setStatus("Create the code in the new tab, then paste it here.", "info");
   }
 
   async function onCopyCode() {
@@ -179,6 +172,7 @@
     const s = result[SYNC_SETTINGS_KEY];
     return {
       code: "",
+      syncEnabled: true,
       autoSync: false,
       lastSyncAt: 0,
       lastStatus: "",
@@ -190,6 +184,7 @@
     try {
       const settings = await readSyncSettings();
       els.syncCode.value = settings.code || "";
+      els.syncEnabled.checked = settings.syncEnabled !== false;
       els.autoSync.checked = !!settings.autoSync;
       renderSyncInfo(settings);
       updateSyncButtons();
@@ -200,7 +195,22 @@
 
   async function saveSyncSettings(patch) {
     const current = await readSyncSettings();
-    const next = { ...current, ...patch };
+    const codeChanged =
+      Object.hasOwn(patch, "code") && patch.code !== current.code;
+    const next = {
+      ...current,
+      ...patch,
+      ...(codeChanged
+        ? {
+            lastSyncAt: 0,
+            lastStatus: "",
+            syncStateCode: "",
+            syncRevision: 0,
+            syncBaseline: {},
+            syncConflicts: {},
+          }
+        : {}),
+    };
     await storage.local.set({ [SYNC_SETTINGS_KEY]: next });
     renderSyncInfo(next);
     updateSyncButtons();
@@ -208,13 +218,19 @@
 
   function updateSyncButtons() {
     const hasCode = !!els.syncCode.value.trim();
-    els.mergeBtn.disabled = !hasCode;
-    els.lwwBtn.disabled = !hasCode;
+    const enabled = els.syncEnabled.checked;
+    els.autoSync.disabled = !enabled;
+    els.mergeBtn.disabled = !enabled || !hasCode;
+    els.lwwBtn.disabled = !enabled || !hasCode;
   }
 
   function renderSyncInfo(settings) {
+    if (settings.syncEnabled === false) {
+      els.syncInfo.textContent = "Sync is disabled.";
+      return;
+    }
     if (!settings.code) {
-      els.syncInfo.textContent = "Not syncing yet — generate or paste a code.";
+      els.syncInfo.textContent = "Not syncing yet — create or paste a code.";
       return;
     }
     if (!settings.lastSyncAt) {
@@ -225,9 +241,19 @@
     }
     const when = new Date(settings.lastSyncAt).toLocaleString();
     const bad = (settings.lastStatus || "").startsWith("error");
-    els.syncInfo.textContent = bad
-      ? `Last sync failed (${when}): ${settings.lastStatus.slice(7)}`
-      : `Last synced ${when}${settings.autoSync ? " · auto-sync on" : ""}.`;
+    const conflict = (settings.lastStatus || "").startsWith("conflict");
+    if (bad) {
+      els.syncInfo.textContent = `Last sync failed (${when}): ${settings.lastStatus.slice(7)}`;
+    } else if (conflict) {
+      const conflictCount = Number(settings.lastStatus.slice(10)) || 0;
+      els.syncInfo.textContent =
+        `Last synced ${when}; ${conflictCount} unresolved ` +
+        `conflict${conflictCount === 1 ? "" : "s"}.`;
+    } else {
+      els.syncInfo.textContent = `Last synced ${when}${
+        settings.autoSync ? " · auto-sync on" : ""
+      }.`;
+    }
   }
 
   async function onSync(mode) {
@@ -244,23 +270,33 @@
     els.mergeBtn.disabled = true;
     els.lwwBtn.disabled = true;
     setStatus(
-      mode === "lww" ? "Syncing (last-write-wins)…" : "Syncing…",
+      mode === "lww" ? "Syncing with local changes…" : "Syncing…",
       "info",
     );
 
     try {
       const res = await runtime.sendMessage({ type: "sync", mode });
       if (res && res.ok) {
-        const verb =
-          res.direction === "pull"
-            ? "Pulled"
-            : res.direction === "push"
-              ? "Pushed"
-              : "Merged";
-        setStatus(
-          `${verb} — ${res.count} manual BPM${res.count === 1 ? "" : "s"} now synced.`,
-          "ok",
-        );
+        if (res.capacityExceeded) {
+          // Downloads still succeeded; only the upload was refused.
+          setStatus(
+            "This sync code is full, so new tracks were not uploaded. " +
+              "Remove some manual BPMs, or create a new code.",
+            "err",
+          );
+        } else if (res.conflicts) {
+          setStatus(
+            `Merged with ${res.conflicts} conflicting track${
+              res.conflicts === 1 ? "" : "s"
+            } kept local. Use local changes to upload them.`,
+            "info",
+          );
+        } else {
+          setStatus(
+            `Synced ${res.count} manual BPM${res.count === 1 ? "" : "s"}.`,
+            "ok",
+          );
+        }
       } else {
         setStatus(`Sync failed: ${res?.error || "unknown error"}`, "err");
       }

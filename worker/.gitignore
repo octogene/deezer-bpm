@@ -1,3 +1,6 @@
 # Rust / worker-build outputs
 /target
 /build
+
+# Local secrets (wrangler dev)
+.dev.vars
