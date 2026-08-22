@@ -857,6 +857,54 @@
 
       <div class="faq-item">
         <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_privacy_q"
+            >What data does the extension collect?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n-html="faq_privacy_short">
+            None of your data leaves your device unless you turn on sync. There
+            are no accounts, no analytics, and no ads. See the full
+            <a
+              href="https://github.com/octogene/deezer-bpm/blob/master/PRIVACY.md"
+              target="_blank"
+              rel="noopener"
+              >privacy policy</a
+            >
+            for details.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_privacy_long1">
+            Your manual BPM overrides live only in the browser's local extension
+            storage until you enable sync. Looking up a track's BPM sends its
+            title, artist, or ID directly from your browser to Deezer's public
+            API — never through a server we operate.
+          </p>
+          <p data-i18n-html="faq_privacy_long2">
+            If you turn sync on, only track IDs and BPM values travel to our
+            Cloudflare-hosted sync server, keyed by a hash of your sync code —
+            never the code itself, and never a name, email, or account. The full
+            breakdown of what's stored, for how long, and who processes it is in
+            the
+            <a
+              href="https://github.com/octogene/deezer-bpm/blob/master/PRIVACY.md"
+              target="_blank"
+              rel="noopener"
+              >privacy policy</a
+            >.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
           <span data-i18n="faq_queue_diff_q"
             >Why are BPM values in the queue list sometimes different from the
             badge or from what they were before?</span
@@ -1191,6 +1239,14 @@
             "Vos valeurs sont stockées sous forme d'enregistrements par titre, versionnés sous un hachage SHA-256 de votre code. Le code est le seul secret : quiconque le détient peut lire et modifier vos BPM. Il n'y a pas de chiffrement de bout en bout — les données sont des identifiants de titres et des nombres de BPM.",
           faq_sync_long2:
             "<strong>Fusionner</strong> applique les modifications et suppressions indépendantes des deux côtés. Les conflits sur un même titre restent locaux et sont exclus de la synchronisation automatique. <strong>Utiliser les modifications locales</strong> envoie explicitement ces valeurs locales.",
+
+          faq_privacy_q: "Quelles données l'extension collecte-t-elle ?",
+          faq_privacy_short:
+            'Aucune de vos données ne quitte votre appareil, sauf si vous activez la synchronisation. Il n\'y a ni compte, ni analytique, ni publicité. Consultez la <a href="https://github.com/octogene/deezer-bpm/blob/master/PRIVACY.md" target="_blank" rel="noopener">politique de confidentialité</a> complète pour le détail.',
+          faq_privacy_long1:
+            "Vos BPM saisis manuellement ne vivent que dans le stockage local de l'extension tant que vous n'avez pas activé la synchronisation. La recherche du BPM d'un titre envoie son titre, son artiste ou son identifiant directement depuis votre navigateur vers l'API publique de Deezer — jamais via un serveur que nous exploitons.",
+          faq_privacy_long2:
+            'Si vous activez la synchronisation, seuls les identifiants de titres et les valeurs BPM sont envoyés vers notre serveur de synchronisation hébergé sur Cloudflare, indexés par un hachage de votre code — jamais le code lui-même, ni un nom, un e-mail ou un compte. Le détail complet de ce qui est stocké, pour combien de temps, et par qui, se trouve dans la <a href="https://github.com/octogene/deezer-bpm/blob/master/PRIVACY.md" target="_blank" rel="noopener">politique de confidentialité</a>.',
 
           faq_queue_diff_q:
             "Pourquoi les valeurs BPM dans la file d'attente sont-elles parfois différentes du badge ou de ce qu'elles étaient avant ?",
