@@ -19,7 +19,17 @@
   const SYNC_ENDPOINT = "https://deezer-bpm-sync.ooctogene.workers.dev";
   const SYNC_ALARM_NAME = "deezerBpmAutoSync";
   const SYNC_INTERVAL_MIN = 15;
+  // Randomized per cycle (not just once) so that clients which happen to
+  // enable auto-sync around the same time -- e.g. two of one person's own
+  // devices, or many users after an update rollout -- drift apart instead of
+  // hammering the Worker in lockstep every SYNC_INTERVAL_MIN.
+  const SYNC_JITTER_MIN = 3;
   const MAX_SYNC_PAGES = 20;
+
+  function nextSyncDelayMinutes() {
+    const jitter = (Math.random() * 2 - 1) * SYNC_JITTER_MIN;
+    return Math.max(1, SYNC_INTERVAL_MIN + jitter);
+  }
 
   const DEBUG = true;
   const log = (...args) => {
@@ -536,10 +546,21 @@
   async function reconfigureAlarm() {
     try {
       const { code, syncEnabled, autoSync } = await readSettings();
-      if (syncEnabled !== false && autoSync && code) {
-        alarms.create(SYNC_ALARM_NAME, { periodInMinutes: SYNC_INTERVAL_MIN });
-        log("auto-sync alarm armed");
-      } else {
+      const shouldRun = syncEnabled !== false && autoSync && !!code;
+      // The service worker re-runs this on every cold start (MV3 tears it down
+      // after ~30s idle), which can be far more often than SYNC_INTERVAL_MIN.
+      // Only touch the alarm when it needs to change, so an already-armed
+      // one-shot keeps its jittered delay instead of being reset to "now".
+      const existing = await alarms.get(SYNC_ALARM_NAME);
+
+      if (shouldRun) {
+        if (!existing) {
+          alarms.create(SYNC_ALARM_NAME, {
+            delayInMinutes: nextSyncDelayMinutes(),
+          });
+          log("auto-sync alarm armed");
+        }
+      } else if (existing) {
         alarms.clear(SYNC_ALARM_NAME);
         log("auto-sync alarm cleared");
       }
@@ -549,7 +570,10 @@
   }
 
   alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name === SYNC_ALARM_NAME) syncNow("merge");
+    if (alarm.name !== SYNC_ALARM_NAME) return;
+    // One-shot alarms self-remove once fired, so re-arm the next cycle here
+    // (with a fresh random delay) instead of using a fixed periodInMinutes.
+    syncNow("merge").finally(() => reconfigureAlarm());
   });
 
   storage.onChanged.addListener((changes, area) => {
