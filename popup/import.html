@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Import BPMs — Deezer BPM</title>
+    <link rel="stylesheet" href="popup.css" />
+    <style>
+      /* This page opens as its own window (see openImportWindow() in
+         popup.js), sized larger than the card so Firefox's native file
+         picker doesn't auto-close it -- center the card in that window. */
+      html {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <img src="../icons/icon128.png" alt="" />
+      <h1>Import CSV</h1>
+    </div>
+
+    <div class="group">
+      <p>Restore or transfer manual BPMs from a CSV file.</p>
+      <label class="replace-row">
+        <input type="checkbox" id="replace-all" />
+        Replace all existing manual BPMs
+      </label>
+      <button id="choose-btn" type="button">Choose File…</button>
+      <input
+        type="file"
+        id="file-input"
+        class="hidden-file"
+        accept=".csv,text/csv"
+      />
+    </div>
+
+    <div id="status" class="info"></div>
+
+    <script src="../content/constants.js"></script>
+    <script src="../content/manual-bpm.js"></script>
+    <script src="csv.js"></script>
+    <script src="import.js"></script>
+  </body>
+</html>
