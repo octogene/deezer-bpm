@@ -249,14 +249,22 @@
       return;
     }
     const when = new Date(settings.lastSyncAt).toLocaleString();
-    const conflict = (settings.lastStatus || "").startsWith("conflict");
+    // Read structured fields directly instead of parsing them back out of
+    // lastStatus text, which breaks as soon as more than one thing needs
+    // reporting at once (e.g. conflicts *and* a full space).
+    const conflictCount = Object.keys(settings.syncConflicts || {}).length;
+    const full = settings.lastCapacityExceeded === true;
     if (bad) {
       els.syncInfo.textContent = `Last sync failed (${when}): ${settings.lastStatus.slice(7)}`;
-    } else if (conflict) {
-      const conflictCount = Number(settings.lastStatus.slice(10)) || 0;
-      els.syncInfo.textContent =
-        `Last synced ${when}; ${conflictCount} unresolved ` +
-        `conflict${conflictCount === 1 ? "" : "s"}.`;
+    } else if (conflictCount || full) {
+      const parts = [];
+      if (conflictCount) {
+        parts.push(
+          `${conflictCount} unresolved conflict${conflictCount === 1 ? "" : "s"}`,
+        );
+      }
+      if (full) parts.push("space full");
+      els.syncInfo.textContent = `Last synced ${when}; ${parts.join(", ")}.`;
     } else {
       els.syncInfo.textContent = `Last synced ${when}${
         settings.autoSync ? " · auto-sync on" : ""

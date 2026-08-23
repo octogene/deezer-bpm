@@ -115,6 +115,7 @@
       autoSync: false,
       lastSyncAt: 0,
       lastStatus: "",
+      lastCapacityExceeded: false,
       syncStateCode: "",
       ...settings,
       syncRevision:
@@ -430,9 +431,10 @@
 
     const lastSyncAt = Date.now();
     const conflictCount = Object.keys(conflicts).length;
-    const statusParts = [];
-    if (conflictCount) statusParts.push(`conflict: ${conflictCount}`);
-    if (response.capacityExceeded) statusParts.push("space full");
+    // Conflict count and capacity are read back from their own fields
+    // (syncConflicts, lastCapacityExceeded) rather than packed into
+    // lastStatus text, so the popup never has to parse them back out of a
+    // string that can combine multiple pieces of state.
     const nextSettings = {
       ...latestSettings,
       syncStateCode: code,
@@ -440,7 +442,8 @@
       syncBaseline: serverBaseline,
       syncConflicts: conflicts,
       lastSyncAt,
-      lastStatus: statusParts.length ? statusParts.join(", ") : "ok",
+      lastStatus: "ok",
+      lastCapacityExceeded: response.capacityExceeded === true,
     };
 
     await storage.local.set({
