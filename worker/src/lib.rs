@@ -53,7 +53,6 @@ struct CreateRequest {
 #[derive(Debug, Deserialize)]
 struct SpaceRow {
     revision: i32,
-    track_count: i32,
 }
 
 #[derive(Debug, Deserialize)]
@@ -443,21 +442,13 @@ async fn start_sync(
     }
 
     let changes_json = serde_json::to_string(&payload.changes)?;
-    let new_count = count_new_tracks(
+    let new_tracks = new_tracks_statement(
         db,
         hash,
         &changes_json,
         payload.base_revision,
         payload.force,
-    )
-    .await?;
-
-    if space.track_count.saturating_add(new_count) > limits.max_tracks_per_space {
-        // Skip the write, but still serve the delta. Failing the whole request
-        // would leave a full space unable to download remote changes either,
-        // with no way out except deleting local overrides.
-        return delta_response(scope, payload.base_revision, space.revision, None, true).await;
-    }
+    )?;
 
     let upsert_args = [
         D1Type::Text(&changes_json),
@@ -533,12 +524,35 @@ async fn start_sync(
         .bind_refs(&hash_arg)?;
 
     let revision = db
-        .prepare("SELECT revision, track_count FROM sync_spaces WHERE sync_hash = ?1")
+        .prepare("SELECT revision FROM sync_spaces WHERE sync_hash = ?1")
         .bind_refs(&hash_arg)?;
 
-    let results = db.batch(vec![upsert, advance, revision]).await?;
+    // All four statements run inside one D1 batch transaction, so new_tracks
+    // and the upsert's own capacity JOIN (line 499) see an identical,
+    // unchanging snapshot -- unlike a separate pre-batch check, this can't
+    // race against a concurrent /sync request to the same space.
+    let results = db
+        .batch(vec![new_tracks, upsert, advance, revision])
+        .await?;
+
+    let new_count = results
+        .first()
+        .ok_or_else(|| Error::RustError("D1 new-track count result missing".into()))?
+        .results::<CountRow>()?
+        .into_iter()
+        .next()
+        .map(|row| row.count)
+        .unwrap_or(0);
+
+    let upsert_changes = results
+        .get(1)
+        .ok_or_else(|| Error::RustError("D1 upsert result missing".into()))?
+        .meta()?
+        .and_then(|meta| meta.changes)
+        .unwrap_or(0);
+
     let through_revision = results
-        .get(2)
+        .get(3)
         .ok_or_else(|| Error::RustError("D1 revision result missing".into()))?
         .results::<SpaceRow>()?
         .into_iter()
@@ -546,7 +560,20 @@ async fn start_sync(
         .map(|row| row.revision)
         .ok_or_else(|| Error::RustError("D1 sync space missing".into()))?;
 
-    delta_response(scope, payload.base_revision, through_revision, None, false).await
+    // The upsert's capacity JOIN is all-or-nothing: either every eligible row
+    // is written, or none are. So if at least one eligible row was a
+    // genuinely new track (new_count > 0) but nothing was written, capacity
+    // -- not a conflict or a no-op resend -- is why.
+    let capacity_exceeded = new_count > 0 && upsert_changes == 0;
+
+    delta_response(
+        scope,
+        payload.base_revision,
+        through_revision,
+        None,
+        capacity_exceeded,
+    )
+    .await
 }
 
 async fn continue_sync(
@@ -666,7 +693,7 @@ async fn delta_response(
 async fn read_space(db: &D1Database, hash: &str) -> Result<Option<SpaceRow>> {
     let arg = D1Type::Text(hash);
     db.prepare(
-        "SELECT revision, track_count
+        "SELECT revision
          FROM sync_spaces
          WHERE sync_hash = ?1 AND active = 1",
     )
@@ -675,53 +702,52 @@ async fn read_space(db: &D1Database, hash: &str) -> Result<Option<SpaceRow>> {
     .await
 }
 
-async fn count_new_tracks(
+// Builds (without executing) the same "how many genuinely new tracks does
+// this batch introduce" query the upsert's own `capacity` CTE uses. Callers
+// run this in the same D1 batch/transaction as the upsert, so the two see an
+// identical snapshot and can never disagree about capacity.
+fn new_tracks_statement(
     db: &D1Database,
     hash: &str,
     changes_json: &str,
     base_revision: i32,
     force: bool,
-) -> Result<i32> {
+) -> Result<D1PreparedStatement> {
     let args = [
         D1Type::Text(changes_json),
         D1Type::Text(hash),
         D1Type::Boolean(force),
         D1Type::Integer(base_revision),
     ];
-    let row = db
-        .prepare(
-            r#"
-            WITH incoming AS (
-              SELECT
-                CAST(json_extract(value, '$.trackId') AS TEXT) AS track_id,
-                CAST(json_extract(value, '$.bpm') AS INTEGER) AS bpm,
-                CASE WHEN json_type(value, '$.bpm') = 'null' THEN 1 ELSE 0 END AS deleted
-              FROM json_each(?1)
-            ),
-            eligible AS (
-              SELECT incoming.*
-              FROM incoming
-              LEFT JOIN overrides AS current
-                ON current.sync_hash = ?2 AND current.track_id = incoming.track_id
-              WHERE (?3 = 1 OR current.revision IS NULL OR current.revision <= ?4)
-                AND (
-                  current.track_id IS NULL
-                  OR current.deleted != incoming.deleted
-                  OR COALESCE(current.bpm, -1) != COALESCE(incoming.bpm, -1)
-                )
+    db.prepare(
+        r#"
+        WITH incoming AS (
+          SELECT
+            CAST(json_extract(value, '$.trackId') AS TEXT) AS track_id,
+            CAST(json_extract(value, '$.bpm') AS INTEGER) AS bpm,
+            CASE WHEN json_type(value, '$.bpm') = 'null' THEN 1 ELSE 0 END AS deleted
+          FROM json_each(?1)
+        ),
+        eligible AS (
+          SELECT incoming.*
+          FROM incoming
+          LEFT JOIN overrides AS current
+            ON current.sync_hash = ?2 AND current.track_id = incoming.track_id
+          WHERE (?3 = 1 OR current.revision IS NULL OR current.revision <= ?4)
+            AND (
+              current.track_id IS NULL
+              OR current.deleted != incoming.deleted
+              OR COALESCE(current.bpm, -1) != COALESCE(incoming.bpm, -1)
             )
-            SELECT COUNT(*) AS count
-            FROM eligible
-            LEFT JOIN overrides AS current
-              ON current.sync_hash = ?2 AND current.track_id = eligible.track_id
-            WHERE current.track_id IS NULL
-            "#,
         )
-        .bind_refs(&args)?
-        .first::<CountRow>(None)
-        .await?;
-
-    Ok(row.map(|row| row.count).unwrap_or(0))
+        SELECT COUNT(*) AS count
+        FROM eligible
+        LEFT JOIN overrides AS current
+          ON current.sync_hash = ?2 AND current.track_id = eligible.track_id
+        WHERE current.track_id IS NULL
+        "#,
+    )
+    .bind_refs(&args)
 }
 
 async fn apply_common_limits(req: &Request, env: &Env) -> Result<bool> {
