@@ -136,7 +136,21 @@
 
       let done = false;
 
-      function commit() {
+      // Undoes the optimistic update below when the background write actually
+      // failed (message rejected, or "Extension context invalidated" mid
+      // navigation) -- without this the edit looked saved but silently never
+      // reached storage, so a reload or the next sync would drop it.
+      function revertToPrevious() {
+        if (currentManual === undefined) {
+          manualBpmCache.delete(trackId);
+        } else {
+          manualBpmCache.set(trackId, currentManual);
+        }
+        syncBpmSpans(trackId);
+        logDebugError(`[EDIT] Could not save manual BPM for track ${trackId}`);
+      }
+
+      async function commit() {
         if (done) return;
         const raw = input.value.trim();
         const val = Number(raw);
@@ -145,14 +159,14 @@
           // Set or replace manual override
           done = true;
           manualBpmCache.set(trackId, val);
-          saveManualOverride(trackId, val);
           syncBpmSpans(trackId);
+          if (!(await saveManualOverride(trackId, val))) revertToPrevious();
         } else if (raw === "" && currentManual !== undefined) {
           // Clear manual override — revert to API value
           done = true;
           manualBpmCache.delete(trackId);
-          saveManualOverride(trackId, null);
           syncBpmSpans(trackId);
+          if (!(await saveManualOverride(trackId, null))) revertToPrevious();
         } else {
           restore();
         }

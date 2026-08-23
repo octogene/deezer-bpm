@@ -198,6 +198,9 @@
   // along on the bulkier, high-frequency auto-cache debounce above — that
   // used to let an unrelated auto-cache save silently clobber a fresh manual
   // edit in another tab.
+  //
+  // Resolves to true/false instead of throwing, so a caller that already
+  // applied an optimistic UI update can tell whether to keep or undo it.
   function saveManualOverride(trackId, bpm) {
     logDebugInfo("[CACHE] Persisting manual overrides");
 
@@ -211,12 +214,14 @@
         if (!response?.ok) {
           throw new Error(response?.error || "manual override write failed");
         }
+        return true;
       })
       .catch((error) => {
         console.warn(
           `${LOG_PREFIX} Could not persist manual overrides:`,
           error,
         );
+        return false;
       });
   }
 
