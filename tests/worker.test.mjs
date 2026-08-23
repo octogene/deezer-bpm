@@ -456,6 +456,50 @@ describe("sync protocol", () => {
     assert.equal(update.body.capacityExceeded, false);
   });
 
+  test("deleting a track frees its slot for a new one", async () => {
+    const code = await createSpace();
+    await syncAll(code, {
+      baseRevision: 0,
+      force: false,
+      changes: ["1", "2", "3", "4"].map((trackId) => ({
+        trackId,
+        bpm: 120,
+      })),
+    });
+
+    let state = await syncAll(code, {
+      baseRevision: 0,
+      force: false,
+      changes: [],
+    });
+
+    // Deleting leaves a tombstone behind (needed to propagate the deletion to
+    // other clients) -- it must not keep counting toward the space's cap.
+    const deletion = await sync(code, {
+      baseRevision: state.revision,
+      force: false,
+      changes: [{ trackId: "1", bpm: null }],
+    });
+    assert.equal(deletion.status, 200);
+    assert.equal(deletion.body.capacityExceeded, false);
+
+    state = await syncAll(code, { baseRevision: 0, force: false, changes: [] });
+
+    const added = await sync(code, {
+      baseRevision: state.revision,
+      force: false,
+      changes: [{ trackId: "5", bpm: 130 }],
+    });
+    assert.equal(
+      added.body.capacityExceeded,
+      false,
+      "deleting a track must free its slot for a new one",
+    );
+
+    state = await syncAll(code, { baseRevision: 0, force: false, changes: [] });
+    assert.ok(state.changes.some((c) => c.trackId === "5" && c.bpm === 130));
+  });
+
   test("reports revision_ahead for a client ahead of the server", async () => {
     const code = await createSpace();
     const result = await sync(code, {

@@ -511,7 +511,7 @@ async fn start_sync(
              SET
                revision = revision + 1,
                track_count = (
-                 SELECT COUNT(*) FROM overrides WHERE sync_hash = ?1
+                 SELECT COUNT(*) FROM overrides WHERE sync_hash = ?1 AND deleted = 0
                ),
                last_active_at = unixepoch()
              WHERE sync_hash = ?1
