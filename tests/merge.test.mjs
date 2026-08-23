@@ -34,7 +34,7 @@ function loadInternals() {
   return internals;
 }
 
-const { buildClientChanges, applyServerChanges, reconcileSync } =
+const { buildClientChanges, applyServerChanges, reconcileSync, chunkChanges } =
   loadInternals();
 
 test("buildClientChanges sends edits and tombstones, skipping blocked conflicts", () => {
@@ -195,4 +195,28 @@ test("reconcileSync resolves a previously blocked conflict under force", () => {
 
   assert.deepEqual(finalLocal, { 1: 128 });
   assert.deepEqual(conflicts, {}, "force must clear the conflict");
+});
+
+test("chunkChanges keeps a small array as a single chunk", () => {
+  const changes = [{ trackId: "1", bpm: 120 }];
+  assert.deepEqual(chunkChanges(changes), [changes]);
+});
+
+test("chunkChanges keeps an empty array as a single empty chunk", () => {
+  assert.deepEqual(chunkChanges([]), [[]]);
+});
+
+test("chunkChanges splits an oversized array without dropping or reordering entries", () => {
+  const changes = Array.from({ length: 1201 }, (_, i) => ({
+    trackId: String(i),
+    bpm: 120,
+  }));
+
+  const chunks = chunkChanges(changes);
+
+  assert.deepEqual(
+    chunks.map((chunk) => chunk.length),
+    [500, 500, 201],
+  );
+  assert.deepEqual(chunks.flat(), changes);
 });

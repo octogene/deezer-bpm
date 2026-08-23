@@ -25,6 +25,9 @@
   // hammering the Worker in lockstep every SYNC_INTERVAL_MIN.
   const SYNC_JITTER_MIN = 3;
   const MAX_SYNC_PAGES = 20;
+  // Must match MAX_CHANGES in worker/wrangler.toml -- the server rejects a
+  // single request carrying more changes than this.
+  const SYNC_MAX_CHANGES_PER_REQUEST = 500;
 
   function nextSyncDelayMinutes() {
     const jitter = (Math.random() * 2 - 1) * SYNC_JITTER_MIN;
@@ -186,7 +189,22 @@
     }
   }
 
-  async function requestSync(code, baseRevision, changes, force) {
+  // Splits changes into chunks no larger than the server's MAX_CHANGES
+  // (worker/wrangler.toml) so a bulk import or a from-scratch resync doesn't
+  // get rejected outright by the "too many changes" limit.
+  function chunkChanges(changes) {
+    if (changes.length <= SYNC_MAX_CHANGES_PER_REQUEST) return [changes];
+
+    const chunks = [];
+    for (let i = 0; i < changes.length; i += SYNC_MAX_CHANGES_PER_REQUEST) {
+      chunks.push(changes.slice(i, i + SYNC_MAX_CHANGES_PER_REQUEST));
+    }
+    return chunks;
+  }
+
+  // Uploads a single chunk of changes (which may itself still be paginated on
+  // the way down) and returns the revision it produced.
+  async function requestSyncChunk(code, baseRevision, changes, force) {
     let cursor = null;
     let throughRevision = null;
     let capacityExceeded = false;
@@ -262,6 +280,26 @@
     }
 
     throw new Error("sync response exceeded the pagination limit");
+  }
+
+  // Uploads all outgoing changes as one or more chunked requests, advancing
+  // baseRevision between chunks, and stitches the resulting deltas back into
+  // one contiguous result -- each chunk's delta only covers its own slice of
+  // revisions, so concatenating them in order reconstructs the full delta
+  // from the original baseRevision through the final one.
+  async function requestSync(code, baseRevision, changes, force) {
+    let revision = baseRevision;
+    let capacityExceeded = false;
+    const serverChanges = [];
+
+    for (const chunk of chunkChanges(changes)) {
+      const result = await requestSyncChunk(code, revision, chunk, force);
+      revision = result.revision;
+      capacityExceeded = capacityExceeded || result.capacityExceeded;
+      serverChanges.push(...result.changes);
+    }
+
+    return { revision, changes: serverChanges, capacityExceeded };
   }
 
   // Returns the rebuilt server baseline plus the set of track IDs the delta
@@ -591,6 +629,7 @@
     normalizeOverrides,
     normalizeConflicts,
     changedIds,
+    chunkChanges,
   };
 
   reconfigureAlarm();
