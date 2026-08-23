@@ -431,12 +431,23 @@
 
     const lastSyncAt = Date.now();
     const conflictCount = Object.keys(conflicts).length;
+
+    // Re-read settings immediately before writing, with nothing awaited in
+    // between, instead of reusing the latestSettings snapshot from above --
+    // a popup toggle (autoSync, syncEnabled, code) written during the
+    // readOverrides()/reconcileSync gap above would otherwise be silently
+    // reverted when this write lands on top of it.
+    const settingsAtWrite = await readSettings();
+    if ((settingsAtWrite.code || "").trim() !== code) {
+      throw new Error("sync code changed while synchronization was running");
+    }
+
     // Conflict count and capacity are read back from their own fields
     // (syncConflicts, lastCapacityExceeded) rather than packed into
     // lastStatus text, so the popup never has to parse them back out of a
     // string that can combine multiple pieces of state.
     const nextSettings = {
-      ...latestSettings,
+      ...settingsAtWrite,
       syncStateCode: code,
       syncRevision: response.revision,
       syncBaseline: serverBaseline,
