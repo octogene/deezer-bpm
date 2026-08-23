@@ -233,6 +233,15 @@
       els.syncInfo.textContent = "Not syncing yet — create or paste a code.";
       return;
     }
+    const bad = (settings.lastStatus || "").startsWith("error");
+    // Check for a failure before the lastSyncAt gate below -- it's only ever
+    // set on a successful sync, so a sync that fails before its first
+    // success would otherwise be reported as "Not synced yet.", hiding the
+    // error entirely.
+    if (bad && !settings.lastSyncAt) {
+      els.syncInfo.textContent = `Sync failed: ${settings.lastStatus.slice(7)}`;
+      return;
+    }
     if (!settings.lastSyncAt) {
       els.syncInfo.textContent = settings.autoSync
         ? "Auto-sync on. Not synced yet."
@@ -240,7 +249,6 @@
       return;
     }
     const when = new Date(settings.lastSyncAt).toLocaleString();
-    const bad = (settings.lastStatus || "").startsWith("error");
     const conflict = (settings.lastStatus || "").startsWith("conflict");
     if (bad) {
       els.syncInfo.textContent = `Last sync failed (${when}): ${settings.lastStatus.slice(7)}`;
