@@ -131,29 +131,10 @@ If local state already exists, migrate it with:
 terraform init -migrate-state -backend-config=backend.hcl
 ```
 
-## Deploy with Wrangler
-
-```sh
-cd worker
-wrangler login
-wrangler d1 create deezer-bpm-sync
-```
-
-Copy the returned database ID into `wrangler.toml`, replacing
-`replace-with-d1-database-id`, then apply the schema and deploy:
-
-```sh
-wrangler d1 migrations apply DB --remote
-wrangler deploy
-```
-
-Replace the local Turnstile test keys in `wrangler.toml` before a manual
-production deployment.
-
-Put the deployed URL in `SYNC_ENDPOINT` in `background.js` and in
-`manifest.json` under `host_permissions`.
-
 ## Local testing
+
+`worker/wrangler.toml` is a local-dev-only config; Terraform is the only
+supported deploy path and never reads it (see "Deploy with Terraform" above).
 
 ```sh
 wrangler d1 migrations apply DB --local
