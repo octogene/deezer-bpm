@@ -140,7 +140,16 @@
       // failed (message rejected, or "Extension context invalidated" mid
       // navigation) -- without this the edit looked saved but silently never
       // reached storage, so a reload or the next sync would drop it.
-      function revertToPrevious() {
+      //
+      // `optimistic` is the cache state *this* commit wrote before saving.
+      // A second overlapping edit on the same track (e.g. a fast
+      // double-commit) can complete and overwrite the cache while this
+      // save is still in flight, so only revert if the cache still holds
+      // what we optimistically wrote — otherwise this failure would
+      // clobber the other commit's already-successful result.
+      function revertToPrevious(optimistic) {
+        if (manualBpmCache.get(trackId) !== optimistic) return;
+
         if (currentManual === undefined) {
           manualBpmCache.delete(trackId);
         } else {
@@ -160,13 +169,14 @@
           done = true;
           manualBpmCache.set(trackId, val);
           syncBpmSpans(trackId);
-          if (!(await saveManualOverride(trackId, val))) revertToPrevious();
+          if (!(await saveManualOverride(trackId, val))) revertToPrevious(val);
         } else if (raw === "" && currentManual !== undefined) {
           // Clear manual override — revert to API value
           done = true;
           manualBpmCache.delete(trackId);
           syncBpmSpans(trackId);
-          if (!(await saveManualOverride(trackId, null))) revertToPrevious();
+          if (!(await saveManualOverride(trackId, null)))
+            revertToPrevious(undefined);
         } else {
           restore();
         }
