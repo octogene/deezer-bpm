@@ -456,6 +456,40 @@ describe("sync protocol", () => {
     assert.equal(update.body.capacityExceeded, false);
   });
 
+  test("an over-cap new track does not block the rest of the same batch", async () => {
+    const code = await createSpace();
+    let state = await syncAll(code, {
+      baseRevision: 0,
+      force: false,
+      changes: ["1", "2", "3", "4"].map((trackId) => ({
+        trackId,
+        bpm: 120,
+      })),
+    });
+
+    // A capacity-neutral edit to an existing track is bundled with a
+    // brand-new track the full space has no room for. The edit must still
+    // land -- only the new track is rejected -- otherwise it would be stuck
+    // behind the same over-cap track on every retry.
+    const mixed = await sync(code, {
+      baseRevision: state.revision,
+      force: false,
+      changes: [
+        { trackId: "1", bpm: 121 },
+        { trackId: "5", bpm: 130 },
+      ],
+    });
+    assert.equal(mixed.status, 200);
+    assert.equal(mixed.body.capacityExceeded, true);
+
+    state = await syncAll(code, { baseRevision: 0, force: false, changes: [] });
+    assert.ok(
+      state.changes.some((c) => c.trackId === "1" && c.bpm === 121),
+      "the bundled edit to an existing track must not be dropped",
+    );
+    assert.ok(!state.changes.some((c) => c.trackId === "5"));
+  });
+
   test("deleting a track frees its slot for a new one", async () => {
     const code = await createSpace();
     await syncAll(code, {
@@ -511,7 +545,11 @@ describe("sync protocol", () => {
       })),
     });
 
-    let state = await syncAll(code, { baseRevision: 0, force: false, changes: [] });
+    let state = await syncAll(code, {
+      baseRevision: 0,
+      force: false,
+      changes: [],
+    });
 
     // Delete "1" and immediately refill its slot with "5", so the space is
     // back at the cap (2,3,4,5 live) while "1" survives on file as a

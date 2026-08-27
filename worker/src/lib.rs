@@ -442,12 +442,13 @@ async fn start_sync(
     }
 
     let changes_json = serde_json::to_string(&payload.changes)?;
-    let new_tracks = new_tracks_statement(
+    let capacity_check = rejected_capacity_statement(
         db,
         hash,
         &changes_json,
         payload.base_revision,
         payload.force,
+        limits.max_tracks_per_space,
     )?;
 
     let upsert_args = [
@@ -468,7 +469,15 @@ async fn start_sync(
               FROM json_each(?1)
             ),
             eligible AS (
-              SELECT incoming.*
+              SELECT
+                incoming.track_id,
+                incoming.bpm,
+                incoming.deleted,
+                CASE
+                  WHEN incoming.deleted = 0 AND (current.track_id IS NULL OR current.deleted = 1)
+                    THEN 1
+                  ELSE 0
+                END AS is_new
               FROM incoming
               LEFT JOIN overrides AS current
                 ON current.sync_hash = ?2 AND current.track_id = incoming.track_id
@@ -479,24 +488,36 @@ async fn start_sync(
                   OR COALESCE(current.bpm, -1) != COALESCE(incoming.bpm, -1)
                 )
             ),
-            capacity AS (
-              SELECT COUNT(*) AS new_count
+            -- Brand-new tracks are admitted in track_id order, up to whatever
+            -- room is left under the cap. Capacity-neutral changes (edits and
+            -- deletes to tracks that already exist) never compete for that
+            -- room, so they always go through below regardless of new_rank.
+            ranked_new AS (
+              SELECT
+                track_id,
+                bpm,
+                deleted,
+                ROW_NUMBER() OVER (ORDER BY track_id) AS new_rank
               FROM eligible
-              LEFT JOIN overrides AS current
-                ON current.sync_hash = ?2 AND current.track_id = eligible.track_id
-              WHERE eligible.deleted = 0
-                AND (current.track_id IS NULL OR current.deleted = 1)
+              WHERE is_new = 1
+            ),
+            admitted AS (
+              SELECT track_id, bpm, deleted FROM eligible WHERE is_new = 0
+              UNION ALL
+              SELECT ranked_new.track_id, ranked_new.bpm, ranked_new.deleted
+              FROM ranked_new
+              JOIN sync_spaces AS space ON space.sync_hash = ?2
+              WHERE space.track_count + ranked_new.new_rank <= ?5
             )
             INSERT INTO overrides (sync_hash, track_id, bpm, deleted, revision)
             SELECT
               ?2,
-              eligible.track_id,
-              CASE WHEN eligible.deleted = 1 THEN NULL ELSE eligible.bpm END,
-              eligible.deleted,
+              admitted.track_id,
+              CASE WHEN admitted.deleted = 1 THEN NULL ELSE admitted.bpm END,
+              admitted.deleted,
               space.revision + 1
-            FROM eligible
+            FROM admitted
             JOIN sync_spaces AS space ON space.sync_hash = ?2
-            JOIN capacity ON space.track_count + capacity.new_count <= ?5
             ON CONFLICT(sync_hash, track_id) DO UPDATE SET
               bpm = excluded.bpm,
               deleted = excluded.deleted,
@@ -528,28 +549,22 @@ async fn start_sync(
         .prepare("SELECT revision FROM sync_spaces WHERE sync_hash = ?1")
         .bind_refs(&hash_arg)?;
 
-    // All four statements run inside one D1 batch transaction, so new_tracks
-    // and the upsert's own capacity JOIN (line 499) see an identical,
-    // unchanging snapshot -- unlike a separate pre-batch check, this can't
-    // race against a concurrent /sync request to the same space.
+    // All four statements run inside one D1 batch transaction, so
+    // capacity_check and the upsert's own ranked_new/admitted CTEs see an
+    // identical, unchanging snapshot of track_count and the existing rows --
+    // unlike a separate pre-batch check, this can't race against a
+    // concurrent /sync request to the same space.
     let results = db
-        .batch(vec![new_tracks, upsert, advance, revision])
+        .batch(vec![capacity_check, upsert, advance, revision])
         .await?;
 
-    let new_count = results
+    let rejected_count = results
         .first()
-        .ok_or_else(|| Error::RustError("D1 new-track count result missing".into()))?
+        .ok_or_else(|| Error::RustError("D1 capacity-check result missing".into()))?
         .results::<CountRow>()?
         .into_iter()
         .next()
         .map(|row| row.count)
-        .unwrap_or(0);
-
-    let upsert_changes = results
-        .get(1)
-        .ok_or_else(|| Error::RustError("D1 upsert result missing".into()))?
-        .meta()?
-        .and_then(|meta| meta.changes)
         .unwrap_or(0);
 
     let through_revision = results
@@ -561,11 +576,11 @@ async fn start_sync(
         .map(|row| row.revision)
         .ok_or_else(|| Error::RustError("D1 sync space missing".into()))?;
 
-    // The upsert's capacity JOIN is all-or-nothing: either every eligible row
-    // is written, or none are. So if at least one eligible row was a
-    // genuinely new track (new_count > 0) but nothing was written, capacity
-    // -- not a conflict or a no-op resend -- is why.
-    let capacity_exceeded = new_count > 0 && upsert_changes == 0;
+    // The upsert admits every capacity-neutral change unconditionally and
+    // only as many brand-new tracks as still fit under the cap, so a batch
+    // that also carries an over-cap new track still gets everything else
+    // applied instead of being dropped wholesale.
+    let capacity_exceeded = rejected_count > 0;
 
     delta_response(
         scope,
@@ -703,22 +718,26 @@ async fn read_space(db: &D1Database, hash: &str) -> Result<Option<SpaceRow>> {
     .await
 }
 
-// Builds (without executing) the same "how many genuinely new tracks does
-// this batch introduce" query the upsert's own `capacity` CTE uses. Callers
-// run this in the same D1 batch/transaction as the upsert, so the two see an
-// identical snapshot and can never disagree about capacity.
-fn new_tracks_statement(
+// Builds (without executing) a read-only query counting how many of this
+// batch's eligible new tracks will NOT fit under the space's cap, using the
+// exact same track_id-ordered ranking the upsert's own ranked_new/admitted
+// CTEs apply. Callers run this in the same D1 batch/transaction as the
+// upsert, so the two see an identical snapshot and can never disagree about
+// which new tracks get admitted.
+fn rejected_capacity_statement(
     db: &D1Database,
     hash: &str,
     changes_json: &str,
     base_revision: i32,
     force: bool,
+    max_tracks_per_space: i32,
 ) -> Result<D1PreparedStatement> {
     let args = [
         D1Type::Text(changes_json),
         D1Type::Text(hash),
         D1Type::Boolean(force),
         D1Type::Integer(base_revision),
+        D1Type::Integer(max_tracks_per_space),
     ];
     db.prepare(
         r#"
@@ -730,7 +749,13 @@ fn new_tracks_statement(
           FROM json_each(?1)
         ),
         eligible AS (
-          SELECT incoming.*
+          SELECT
+            incoming.track_id,
+            CASE
+              WHEN incoming.deleted = 0 AND (current.track_id IS NULL OR current.deleted = 1)
+                THEN 1
+              ELSE 0
+            END AS is_new
           FROM incoming
           LEFT JOIN overrides AS current
             ON current.sync_hash = ?2 AND current.track_id = incoming.track_id
@@ -740,13 +765,16 @@ fn new_tracks_statement(
               OR current.deleted != incoming.deleted
               OR COALESCE(current.bpm, -1) != COALESCE(incoming.bpm, -1)
             )
+        ),
+        ranked_new AS (
+          SELECT ROW_NUMBER() OVER (ORDER BY track_id) AS new_rank
+          FROM eligible
+          WHERE is_new = 1
         )
         SELECT COUNT(*) AS count
-        FROM eligible
-        LEFT JOIN overrides AS current
-          ON current.sync_hash = ?2 AND current.track_id = eligible.track_id
-        WHERE eligible.deleted = 0
-          AND (current.track_id IS NULL OR current.deleted = 1)
+        FROM ranked_new
+        JOIN sync_spaces AS space ON space.sync_hash = ?2
+        WHERE space.track_count + ranked_new.new_rank > ?5
         "#,
     )
     .bind_refs(&args)
