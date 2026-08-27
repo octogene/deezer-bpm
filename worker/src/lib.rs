@@ -484,7 +484,8 @@ async fn start_sync(
               FROM eligible
               LEFT JOIN overrides AS current
                 ON current.sync_hash = ?2 AND current.track_id = eligible.track_id
-              WHERE current.track_id IS NULL
+              WHERE eligible.deleted = 0
+                AND (current.track_id IS NULL OR current.deleted = 1)
             )
             INSERT INTO overrides (sync_hash, track_id, bpm, deleted, revision)
             SELECT
@@ -744,7 +745,8 @@ fn new_tracks_statement(
         FROM eligible
         LEFT JOIN overrides AS current
           ON current.sync_hash = ?2 AND current.track_id = eligible.track_id
-        WHERE current.track_id IS NULL
+        WHERE eligible.deleted = 0
+          AND (current.track_id IS NULL OR current.deleted = 1)
         "#,
     )
     .bind_refs(&args)

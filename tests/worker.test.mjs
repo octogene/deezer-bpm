@@ -500,6 +500,54 @@ describe("sync protocol", () => {
     assert.ok(state.changes.some((c) => c.trackId === "5" && c.bpm === 130));
   });
 
+  test("reviving a tombstoned track counts against the cap like any new track", async () => {
+    const code = await createSpace();
+    await syncAll(code, {
+      baseRevision: 0,
+      force: false,
+      changes: ["1", "2", "3", "4"].map((trackId) => ({
+        trackId,
+        bpm: 120,
+      })),
+    });
+
+    let state = await syncAll(code, { baseRevision: 0, force: false, changes: [] });
+
+    // Delete "1" and immediately refill its slot with "5", so the space is
+    // back at the cap (2,3,4,5 live) while "1" survives on file as a
+    // tombstone.
+    await sync(code, {
+      baseRevision: state.revision,
+      force: false,
+      changes: [{ trackId: "1", bpm: null }],
+    });
+    state = await syncAll(code, { baseRevision: 0, force: false, changes: [] });
+    const refill = await sync(code, {
+      baseRevision: state.revision,
+      force: false,
+      changes: [{ trackId: "5", bpm: 130 }],
+    });
+    assert.equal(refill.body.capacityExceeded, false);
+    state = await syncAll(code, { baseRevision: 0, force: false, changes: [] });
+
+    // The space is full again. Reviving the tombstoned "1" must be treated
+    // as adding a track, not as a capacity-neutral update to an existing
+    // one, even though a row for "1" already exists on file.
+    const revived = await sync(code, {
+      baseRevision: state.revision,
+      force: false,
+      changes: [{ trackId: "1", bpm: 121 }],
+    });
+    assert.equal(revived.status, 200);
+    assert.equal(revived.body.capacityExceeded, true);
+
+    state = await syncAll(code, { baseRevision: 0, force: false, changes: [] });
+    assert.ok(
+      !state.changes.some((c) => c.trackId === "1" && c.bpm === 121),
+      "reviving a tombstoned track must not bypass a full space's cap",
+    );
+  });
+
   test("reports revision_ahead for a client ahead of the server", async () => {
     const code = await createSpace();
     const result = await sync(code, {
