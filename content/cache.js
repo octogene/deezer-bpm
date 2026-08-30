@@ -63,6 +63,8 @@
     typeof browser !== "undefined" && browser.storage
       ? browser.storage
       : chrome.storage;
+  const runtimeApi =
+    typeof browser !== "undefined" ? browser.runtime : chrome.runtime;
 
   let saveDebounce = null;
 
@@ -178,16 +180,25 @@
   function persistCaches() {
     logDebugInfo("[CACHE] Persisting caches");
 
-    return storageApi.local
-      .set({
-        [BPM_CACHE_STORAGE_KEY]: Object.fromEntries(bpmCache),
-        [COVER_CACHE_STORAGE_KEY]: Object.fromEntries(coverCache),
-        [COVER_TRACK_CACHE_STORAGE_KEY]:
-          Object.fromEntries(trackResolutionCache),
-      })
-      .catch((error) => {
+    // storageApi.local.set can throw synchronously (rather than reject) when
+    // the extension context is invalidated mid page-teardown, e.g. the
+    // flushPendingCacheSave() call on pagehide — the try/catch below is
+    // needed because a synchronous throw happens before .catch() attaches.
+    try {
+      return Promise.resolve(
+        storageApi.local.set({
+          [BPM_CACHE_STORAGE_KEY]: Object.fromEntries(bpmCache),
+          [COVER_CACHE_STORAGE_KEY]: Object.fromEntries(coverCache),
+          [COVER_TRACK_CACHE_STORAGE_KEY]:
+            Object.fromEntries(trackResolutionCache),
+        }),
+      ).catch((error) => {
         console.warn(`${LOG_PREFIX} Could not persist cache:`, error);
       });
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} Could not persist cache:`, error);
+      return Promise.resolve();
+    }
   }
 
   // Manual overrides are edited one at a time by deliberate user action (the
@@ -196,17 +207,39 @@
   // along on the bulkier, high-frequency auto-cache debounce above — that
   // used to let an unrelated auto-cache save silently clobber a fresh manual
   // edit in another tab.
-  function saveManualOverrides() {
+  //
+  // Resolves to true/false instead of throwing, so a caller that already
+  // applied an optimistic UI update can tell whether to keep or undo it.
+  function saveManualOverride(trackId, bpm) {
     logDebugInfo("[CACHE] Persisting manual overrides");
 
-    return storageApi.local
-      .set({ [MANUAL_BPM_STORAGE_KEY]: Object.fromEntries(manualBpmCache) })
-      .catch((error) => {
-        console.warn(
-          `${LOG_PREFIX} Could not persist manual overrides:`,
-          error,
-        );
-      });
+    // Same synchronous-throw hazard as persistCaches() above: sendMessage
+    // can throw immediately instead of rejecting when the extension context
+    // is invalidated mid navigation.
+    try {
+      return runtimeApi
+        .sendMessage({
+          type: "set-manual-override",
+          trackId,
+          bpm,
+        })
+        .then((response) => {
+          if (!response?.ok) {
+            throw new Error(response?.error || "manual override write failed");
+          }
+          return true;
+        })
+        .catch((error) => {
+          console.warn(
+            `${LOG_PREFIX} Could not persist manual overrides:`,
+            error,
+          );
+          return false;
+        });
+    } catch (error) {
+      console.warn(`${LOG_PREFIX} Could not persist manual overrides:`, error);
+      return Promise.resolve(false);
+    }
   }
 
   // Rebuilds manualBpmCache from a stored overrides object (same shape and
@@ -273,7 +306,7 @@
     scheduleSaveCache,
     flushPendingCacheSave,
     getEffectiveBpm,
-    saveManualOverrides,
+    saveManualOverride,
     applyManualOverridesFromStorage,
   };
 })();

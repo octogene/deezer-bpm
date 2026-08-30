@@ -1,0 +1,82 @@
+# Cloudflare Worker config for the Deezer BPM sync endpoint (Rust / workers-rs).
+# Local dev only (`wrangler dev`, local D1 migrations) — see worker/README.md.
+# Production is deployed by Terraform (worker/terraform), which ignores this
+# file and generates its own throwaway config for remote D1 migrations.
+
+name = "deezer-bpm-sync"
+main = "build/worker/shim.mjs"
+compatibility_date = "2024-11-01"
+
+# Compile the Rust crate to wasm. worker-build is installed on demand; it emits
+# the JS shim referenced by `main` above.
+[build]
+command = "cargo install -q worker-build && worker-build --release"
+
+# D1 stores revisioned per-track overrides and deletion tombstones. The ID
+# below is a placeholder: `--local` runs against a local SQLite file and
+# never calls the Cloudflare API, so it doesn't need to match a real database.
+[[d1_databases]]
+binding = "DB"
+database_name = "deezer-bpm-sync"
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"
+
+[vars]
+MAX_CHANGES = "500"
+MAX_DELTA_ROWS = "1000"
+MAX_TRACKS_PER_SPACE = "5000"
+MAX_TRACK_ID_LENGTH = "20"
+DAILY_REQUEST_BUDGET = "10000"
+DAILY_CREATION_BUDGET = "100"
+DAILY_READ_ROW_BUDGET = "4000000"
+DAILY_WRITE_ROW_BUDGET = "40000"
+EMPTY_SPACE_RETENTION_DAYS = "7"
+INACTIVE_SPACE_RETENTION_DAYS = "180"
+CLEANUP_BATCH_SIZE = "100"
+TURNSTILE_SITE_KEY = "0x4AAAAAAAAAA_AAA3"
+
+# TURNSTILE_SECRET_KEY is not set here: it's a secret, not a var. Set it with
+# `wrangler secret put TURNSTILE_SECRET_KEY` (or in .dev.vars for local dev).
+
+[[durable_objects.bindings]]
+name = "SAFETY_BUDGET"
+class_name = "SafetyBudget"
+
+[exports.SafetyBudget]
+type = "durable-object"
+storage = "sqlite"
+
+[[ratelimits]]
+name = "IP_RATE_LIMITER"
+namespace_id = "1001"
+
+[ratelimits.simple]
+limit = 20
+period = 60
+
+[[ratelimits]]
+name = "CODE_RATE_LIMITER"
+namespace_id = "1002"
+
+[ratelimits.simple]
+limit = 30
+period = 60
+
+[[ratelimits]]
+name = "CREATE_RATE_LIMITER"
+namespace_id = "1003"
+
+[ratelimits.simple]
+limit = 5
+period = 60
+
+[[ratelimits]]
+name = "GLOBAL_RATE_LIMITER"
+namespace_id = "1004"
+
+[ratelimits.simple]
+limit = 300
+period = 60
+
+[triggers]
+crons = ["17 3 * * *"]

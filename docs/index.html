@@ -570,6 +570,15 @@
         </p>
       </div>
       <div class="feature">
+        <div class="feature-icon">☁️</div>
+        <h3 data-i18n="feat_sync_title">Online sync</h3>
+        <p data-i18n="feat_sync_desc">
+          Keep your manual BPMs in sync across browsers with a private sync code
+          — no account needed. Independent edits and deletions merge
+          automatically; same-track conflicts stay local until you resolve them.
+        </p>
+      </div>
+      <div class="feature">
         <div class="feature-icon">⚡</div>
         <h3 data-i18n="feat3_title">Instant &amp; cached</h3>
         <p data-i18n="feat3_desc">
@@ -803,6 +812,93 @@
             and reported. You can choose to merge the file with your existing
             overrides or replace them entirely, and imported values appear
             immediately without reloading the page.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_sync_q"
+            >Can I sync my manual BPMs across browsers?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n="faq_sync_short">
+            Yes. In the extension's toolbar menu, click
+            <strong>Generate</strong> to create a private sync code, then enter
+            that same code on another browser to link them. Use
+            <strong>Merge now</strong> to combine independent changes. If both
+            browsers changed the same track, use
+            <strong>Use local changes</strong> only when you want this browser's
+            value to replace the remote one.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_sync_long1">
+            Overrides are stored as revisioned per-track records under a SHA-256
+            hash of your sync code. The code is the only secret: anyone who has
+            it can read and change your BPMs, so keep it private. There is no
+            end-to-end encryption — the data is track IDs and BPM numbers.
+          </p>
+          <p data-i18n="faq_sync_long2">
+            <strong>Merge</strong> applies independent edits and deletions from
+            both sides. Same-track conflicts remain visible locally and are
+            excluded from automatic sync. <strong>Use local changes</strong>
+            explicitly uploads those local values.
+          </p>
+        </div>
+      </div>
+
+      <div class="faq-item">
+        <button class="faq-question" aria-expanded="false">
+          <span data-i18n="faq_privacy_q"
+            >What data does the extension collect?</span
+          >
+          <span class="faq-chevron">▼</span>
+        </button>
+        <div class="faq-answer" role="region">
+          <span class="faq-label" data-i18n="faq_short">In short</span>
+          <p data-i18n-html="faq_privacy_short">
+            None of your data leaves your device unless you turn on sync. There
+            are no accounts, no analytics, and no ads. See the full
+            <a
+              href="https://github.com/octogene/deezer-bpm/blob/master/PRIVACY.md"
+              target="_blank"
+              rel="noopener"
+              >privacy policy</a
+            >
+            for details.
+          </p>
+          <span
+            class="faq-label"
+            style="margin-top: 16px; display: inline-block"
+            data-i18n="faq_curious"
+            >For the curious</span
+          >
+          <p data-i18n="faq_privacy_long1">
+            Your manual BPM overrides live only in the browser's local extension
+            storage until you enable sync. Looking up a track's BPM sends its
+            title, artist, or ID directly from your browser to Deezer's public
+            API — never through a server we operate.
+          </p>
+          <p data-i18n-html="faq_privacy_long2">
+            If you turn sync on, only track IDs and BPM values travel to our
+            Cloudflare-hosted sync server, keyed by a hash of your sync code —
+            never the code itself, and never a name, email, or account. The full
+            breakdown of what's stored, for how long, and who processes it is in
+            the
+            <a
+              href="https://github.com/octogene/deezer-bpm/blob/master/PRIVACY.md"
+              target="_blank"
+              rel="noopener"
+              >privacy policy</a
+            >.
           </p>
         </div>
       </div>
@@ -1077,6 +1173,9 @@
           feat_export_title: "Import &amp; export",
           feat_export_desc:
             "Sauvegardez vos BPM saisis manuellement dans un fichier CSV depuis le menu de la barre d'outils, puis importez-les sur un autre appareil ou après une réinstallation. Les fichiers importés sont validés avant toute application.",
+          feat_sync_title: "Synchronisation en ligne",
+          feat_sync_desc:
+            "Gardez vos BPM manuels synchronisés entre navigateurs grâce à un code privé — sans compte. Les modifications et suppressions indépendantes sont fusionnées automatiquement ; les conflits sur un même titre restent locaux jusqu'à leur résolution.",
           feat3_title: "Instantané &amp; en cache",
           feat3_desc:
             "Les valeurs BPM sont mises en cache entre les sessions pour que les titres déjà consultés s'affichent instantanément, sans nouvel appel API.",
@@ -1131,6 +1230,23 @@
             "Le fichier exporté est un petit CSV avec une ligne par titre : son identifiant Deezer et votre valeur BPM. Seules vos valeurs personnalisées sont exportées — les valeurs récupérées automatiquement depuis Deezer ne sont pas incluses.",
           faq_export_long2:
             "À l'import, le fichier est validé avant tout enregistrement : il doit comporter les bonnes colonnes, chaque identifiant doit être numérique et chaque BPM doit être un nombre entier entre 1 et 999. Les lignes invalides sont ignorées et signalées. Vous pouvez choisir de fusionner le fichier avec vos valeurs existantes ou de les remplacer entièrement, et les valeurs importées apparaissent immédiatement sans recharger la page.",
+
+          faq_sync_q:
+            "Puis-je synchroniser mes BPM manuels entre navigateurs ?",
+          faq_sync_short:
+            "Oui. Dans le menu de l'extension, cliquez sur <strong>Générer</strong>, puis saisissez le même code sur l'autre navigateur. Utilisez <strong>Fusionner</strong> pour combiner les modifications indépendantes. Si les deux navigateurs ont modifié le même titre, utilisez <strong>Utiliser les modifications locales</strong> uniquement pour remplacer la valeur distante.",
+          faq_sync_long1:
+            "Vos valeurs sont stockées sous forme d'enregistrements par titre, versionnés sous un hachage SHA-256 de votre code. Le code est le seul secret : quiconque le détient peut lire et modifier vos BPM. Il n'y a pas de chiffrement de bout en bout — les données sont des identifiants de titres et des nombres de BPM.",
+          faq_sync_long2:
+            "<strong>Fusionner</strong> applique les modifications et suppressions indépendantes des deux côtés. Les conflits sur un même titre restent locaux et sont exclus de la synchronisation automatique. <strong>Utiliser les modifications locales</strong> envoie explicitement ces valeurs locales.",
+
+          faq_privacy_q: "Quelles données l'extension collecte-t-elle ?",
+          faq_privacy_short:
+            'Aucune de vos données ne quitte votre appareil, sauf si vous activez la synchronisation. Il n\'y a ni compte, ni analytique, ni publicité. Consultez la <a href="https://github.com/octogene/deezer-bpm/blob/master/PRIVACY.md" target="_blank" rel="noopener">politique de confidentialité</a> complète pour le détail.',
+          faq_privacy_long1:
+            "Vos BPM saisis manuellement ne vivent que dans le stockage local de l'extension tant que vous n'avez pas activé la synchronisation. La recherche du BPM d'un titre envoie son titre, son artiste ou son identifiant directement depuis votre navigateur vers l'API publique de Deezer — jamais via un serveur que nous exploitons.",
+          faq_privacy_long2:
+            'Si vous activez la synchronisation, seuls les identifiants de titres et les valeurs BPM sont envoyés vers notre serveur de synchronisation hébergé sur Cloudflare, indexés par un hachage de votre code — jamais le code lui-même, ni un nom, un e-mail ou un compte. Le détail complet de ce qui est stocké, pour combien de temps, et par qui, se trouve dans la <a href="https://github.com/octogene/deezer-bpm/blob/master/PRIVACY.md" target="_blank" rel="noopener">politique de confidentialité</a>.',
 
           faq_queue_diff_q:
             "Pourquoi les valeurs BPM dans la file d'attente sont-elles parfois différentes du badge ou de ce qu'elles étaient avant ?",

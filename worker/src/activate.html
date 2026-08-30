@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Create Deezer BPM sync code</title>
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <style>
+    body { max-width: 34rem; margin: 4rem auto; padding: 0 1rem; color: #eee;
+      background: #0f0f1a; font: 16px system-ui, sans-serif; }
+    main { padding: 2rem; border: 1px solid #2a2a44; border-radius: 12px;
+      background: #1a1a2e; }
+    button, input { width: 100%; box-sizing: border-box; padding: .8rem; margin-top: 1rem; }
+    button { color: white; background: #7b2cbf; border: 0; border-radius: 8px; }
+    .cf-turnstile { display: flex; justify-content: center; margin-top: 1rem; }
+    code { display: block; margin-top: 1rem; padding: 1rem; border: 1px solid #2a2a44;
+      border-radius: 8px; background: #0f0f1a; color: #c9a7ff; text-align: center;
+      font: 1.1rem ui-monospace, monospace; letter-spacing: .08em; word-break: break-all; }
+    /* The display rule above outranks the UA stylesheet, so hidden needs saying twice. */
+    code[hidden] { display: none; }
+    .notice { display: flex; gap: .5rem; margin-top: 1rem; padding: .7rem .9rem;
+      border: 1px solid #4a2f6b; border-radius: 8px; background: rgba(123,44,191,.15);
+      color: #c9a7ff; font-size: .85rem; line-height: 1.4; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Create a sync code</h1>
+  <p>Complete the check, then copy the code into the extension.</p>
+  <p class="notice">ⓘ A sync code that hasn't been used for 6 months will be deleted, along with everything stored under it.</p>
+  <div class="cf-turnstile" data-sitekey="__TURNSTILE_SITE_KEY__"></div>
+  <button id="create" type="button">Create code</button>
+  <p id="status"></p>
+  <code id="code" hidden></code>
+  <button id="copy" type="button" hidden>Copy code</button>
+</main>
+<script>
+const status = document.getElementById("status");
+const codeBox = document.getElementById("code");
+const copyBtn = document.getElementById("copy");
+let created = "";
+
+document.getElementById("create").addEventListener("click", async () => {
+  const token = document.querySelector('[name="cf-turnstile-response"]')?.value;
+  if (!token) { status.textContent = "Complete the check first."; return; }
+  status.textContent = "Creating…";
+  let response, data;
+  try {
+    response = await fetch("/spaces", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ turnstileToken: token })
+    });
+    data = await response.json();
+  } catch (error) {
+    status.textContent = "Network error. Try again.";
+    return;
+  }
+  if (!response.ok) { status.textContent = data.error || "Creation failed."; return; }
+
+  created = data.code;
+  status.textContent = "Copy this code into the extension:";
+  codeBox.textContent = created;
+  codeBox.hidden = false;
+  copyBtn.hidden = false;
+});
+
+copyBtn.addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(created);
+    copyBtn.textContent = "Copied";
+  } catch (error) {
+    copyBtn.textContent = "Select the code and press Ctrl+C";
+  }
+});
+</script>
+</body>
+</html>

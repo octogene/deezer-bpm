@@ -30,8 +30,60 @@ jobs:
       - name: Lint JS
         run: npm run lint:js
 
+      - name: Unit tests
+        run: npm test
+
       - name: Install web-ext
         run: npm install -g web-ext
 
       - name: Lint extension
         run: web-ext lint --source-dir .
+
+  worker:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add wasm32-unknown-unknown
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Check Worker
+        working-directory: worker
+        run: |
+          cargo fmt --check
+          cargo test
+
+      # Also produces build/index.js and build/index_bg.wasm, the exact modules
+      # Terraform uploads, so a release-mode wasm failure surfaces here.
+      - name: Build Worker
+        working-directory: worker
+        run: |
+          cargo install worker-build --locked
+          worker-build --release
+
+      - name: Integration tests (local Wrangler/D1)
+        run: |
+          npm install
+          npm run test:worker
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~1.12.0"
+
+      - name: Validate Terraform
+        working-directory: worker/terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false
+          terraform validate

@@ -118,6 +118,40 @@ button:disabled {
   cursor: pointer;
 }
 
+#sync-code {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.02em;
+}
+
+#sync-code:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--purple) 60%, transparent);
+}
+
+.sync-actions {
+  display: flex;
+  gap: 8px;
+  margin: 8px 0 12px;
+}
+
+#merge-btn {
+  margin-bottom: 8px;
+}
+
+.sync-info {
+  margin-top: 10px;
+  margin-bottom: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
 #status {
   min-height: 1.2em;
   font-size: 0.78rem;

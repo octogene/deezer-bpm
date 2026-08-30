@@ -27,7 +27,7 @@
     bpmCache,
     trackResolutionCache,
     manualBpmCache,
-    saveManualOverrides,
+    saveManualOverride,
     getEffectiveBpm,
   } = window.DeezerBpm.cache;
 
@@ -136,7 +136,30 @@
 
       let done = false;
 
-      function commit() {
+      // Undoes the optimistic update below when the background write actually
+      // failed (message rejected, or "Extension context invalidated" mid
+      // navigation) -- without this the edit looked saved but silently never
+      // reached storage, so a reload or the next sync would drop it.
+      //
+      // `optimistic` is the cache state *this* commit wrote before saving.
+      // A second overlapping edit on the same track (e.g. a fast
+      // double-commit) can complete and overwrite the cache while this
+      // save is still in flight, so only revert if the cache still holds
+      // what we optimistically wrote — otherwise this failure would
+      // clobber the other commit's already-successful result.
+      function revertToPrevious(optimistic) {
+        if (manualBpmCache.get(trackId) !== optimistic) return;
+
+        if (currentManual === undefined) {
+          manualBpmCache.delete(trackId);
+        } else {
+          manualBpmCache.set(trackId, currentManual);
+        }
+        syncBpmSpans(trackId);
+        logDebugError(`[EDIT] Could not save manual BPM for track ${trackId}`);
+      }
+
+      async function commit() {
         if (done) return;
         const raw = input.value.trim();
         const val = Number(raw);
@@ -145,14 +168,15 @@
           // Set or replace manual override
           done = true;
           manualBpmCache.set(trackId, val);
-          saveManualOverrides();
           syncBpmSpans(trackId);
+          if (!(await saveManualOverride(trackId, val))) revertToPrevious(val);
         } else if (raw === "" && currentManual !== undefined) {
           // Clear manual override — revert to API value
           done = true;
           manualBpmCache.delete(trackId);
-          saveManualOverrides();
           syncBpmSpans(trackId);
+          if (!(await saveManualOverride(trackId, null)))
+            revertToPrevious(undefined);
         } else {
           restore();
         }

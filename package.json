@@ -2,13 +2,19 @@
   "name": "deezer-bpm",
   "private": true,
   "scripts": {
-    "lint:js": "eslint content popup web-ext-config.mjs",
-    "format": "prettier --write \"content/**/*.js\" \"popup/**/*.{js,html}\" \"docs/**/*.html\" \"*.{js,mjs,json,md}\"",
-    "format:check": "prettier --check \"content/**/*.js\" \"popup/**/*.{js,html}\" \"docs/**/*.html\" \"*.{js,mjs,json,md}\""
+    "configure:sync-endpoint": "node scripts/configure-sync-endpoint.mjs",
+    "manifest:chrome": "node scripts/use-chrome-manifest.mjs",
+    "test": "node --test tests/merge.test.mjs tests/playlist-dom.test.mjs",
+    "test:worker": "node --test --test-concurrency=1 --test-timeout=300000 tests/worker.test.mjs tests/limits.test.mjs tests/safety.test.mjs",
+    "lint:js": "eslint content popup scripts tests background.js web-ext-config.mjs",
+    "format": "prettier --write \"content/**/*.js\" \"popup/**/*.{js,html}\" \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"docs/**/*.html\" \"worker/*.md\" \"*.{js,mjs,json,md}\"",
+    "format:check": "prettier --check \"content/**/*.js\" \"popup/**/*.{js,html}\" \"scripts/**/*.mjs\" \"tests/**/*.mjs\" \"docs/**/*.html\" \"worker/*.md\" \"*.{js,mjs,json,md}\""
   },
   "devDependencies": {
     "eslint": "^10.1.0",
     "globals": "^17.4.0",
-    "prettier": "^3.8.2"
+    "jsdom": "^29.1.1",
+    "prettier": "^3.8.2",
+    "wrangler": "^4.125.0"
   }
 }

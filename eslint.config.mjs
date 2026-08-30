@@ -2,7 +2,7 @@ import globals from "globals";
 
 export default [
   {
-    files: ["content/**/*.js", "popup/**/*.js"],
+    files: ["content/**/*.js", "popup/**/*.js", "background.js"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "script",
@@ -22,11 +22,17 @@ export default [
     },
   },
   {
-    files: ["web-ext-config.mjs"],
+    files: ["web-ext-config.mjs", "scripts/**/*.mjs", "tests/**/*.mjs"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
       globals: globals.node,
+    },
+    rules: {
+      "no-unused-vars": "warn",
+      "no-undef": "error",
+      eqeqeq: ["error", "always"],
+      "no-var": "error",
     },
   },
 ];

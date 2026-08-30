@@ -11,12 +11,19 @@ jobs:
   lint:
     uses: ./.github/workflows/lint.yml
 
-  release:
+  deploy:
     needs: lint
+    uses: ./.github/workflows/deploy-worker.yml
+    secrets: inherit
+
+  release:
+    needs: deploy
     runs-on: ubuntu-latest
     environment: production
     permissions:
       contents: write
+    env:
+      SYNC_ENDPOINT: ${{ needs.deploy.outputs.sync_endpoint }}
 
     steps:
       - name: Checkout
@@ -36,12 +43,14 @@ jobs:
           jq --arg v "$VERSION" '.version = $v' manifest.json > tmp.json
           mv tmp.json manifest.json
 
-      - name: Build extension
-        run: |
-          web-ext build \
-            --source-dir . \
-            --artifacts-dir web-ext-artifacts
+      - name: Configure sync endpoint
+        run: npm run configure:sync-endpoint -- "$SYNC_ENDPOINT"
 
+      # Runs first, while manifest.json still has the background.scripts
+      # shape Firefox needs (Firefox has no MV3 service_worker support at
+      # all). Chrome's build below swaps that manifest for its own shape
+      # afterward -- Firefox and Chrome cannot share one manifest here, see
+      # scripts/use-chrome-manifest.mjs.
       - name: Sign extension (Firefox)
         if: ${{ !github.event.release.prerelease }}
         env:
@@ -58,6 +67,15 @@ jobs:
             --api-secret "$AMO_API_SECRET" \
             --channel "$CHANNEL" \
             --approval-timeout 1200 || true
+
+      - name: Prepare Chrome manifest
+        run: npm run manifest:chrome
+
+      - name: Build extension (Chrome)
+        run: |
+          web-ext build \
+            --source-dir . \
+            --artifacts-dir web-ext-artifacts
 
       - name: Collect artifacts
         id: artifacts

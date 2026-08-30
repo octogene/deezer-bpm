@@ -7,6 +7,8 @@ A browser extension for Firefox and Chrome that displays the BPM of songs on [De
 - **Floating badge** — shows the BPM of the currently playing track in a fixed badge at the bottom-right of the page
 - **Playlist mode** — shows the BPM next to each track in a playlist or album view, loaded lazily as you scroll
 - **BPM Selection & Filtering** — select and filter tracks by BPM range using expressions like `>120` or `124`
+- **Manual BPM overrides** — double-click a BPM cell to set your own value; export/import them as CSV
+- **Online sync** — sync your manual overrides across browsers with a private sync code (no account needed)
 - **Persistent preference** — playlist mode and other settings are remembered across sessions
 - **Localized** — UI available in English and French
 
@@ -56,6 +58,25 @@ A browser extension for Firefox and Chrome that displays the BPM of songs on [De
    - Enter an expression: `>120` (greater than 120), `<=90` (less or equal to 90), `120-130` (range), or `124` (exact match)
    - Matching tracks are highlighted and automatically checked in the playlist
 
+## Syncing manual overrides across browsers
+
+Manual BPM overrides (double-click a BPM cell to set one) can be synced online
+from the extension popup, with **no account** — just a private **sync code**:
+
+1. Open the popup → **Sync** → **Create**, complete the anti-bot check, then
+   paste the generated code into the popup.
+2. On another browser, paste the same code and click **Merge now**.
+   - **Merge** applies independent edits and deletions from both sides.
+   - If both browsers changed the same track, the value stays local and automatic
+     sync pauses that track. **Use local changes** explicitly uploads it.
+3. Tick **Auto-sync every 15 minutes** to keep browsers in sync automatically
+   (auto-sync never overwrites unresolved same-track conflicts).
+
+The code is the only secret — anyone who has it can read and change your BPMs, so
+keep it private. Syncing requires the D1-backed Worker to be deployed (see
+[`worker/README.md`](worker/README.md)) and its URL configured in `manifest.json`
+and `background.js`.
+
 ## How it works
 
 BPM data is fetched from the public [Deezer API](https://developers.deezer.com/api) (`/track/{id}`) — no API key required.
@@ -69,7 +90,10 @@ The extension is a plain WebExtension (Manifest V3) with no build step.
 ```
 deezer-bpm/
 ├── manifest.json
+├── background.js   # service worker: update page + online-sync engine/alarm
 ├── content/        # content script modules
+├── popup/          # browser-action popup (export/import + sync UI)
+├── worker/         # Cloudflare Worker + D1 sync backend (deploy separately)
 ├── styles.css      # badge and inline BPM tag styles
 ├── _locales/       # internationalization support
 └── icons/          # extension icons
@@ -101,14 +125,20 @@ git push origin v1.0.0
 
 This requires several repository secrets to be set (**Settings → Secrets → Actions**):
 
-| Secret                 | Description                     |
-| ---------------------- | ------------------------------- |
-| `AMO_API_KEY`          | AMO JWT issuer key (Firefox)    |
-| `AMO_API_SECRET`       | AMO JWT secret (Firefox)        |
-| `CHROME_EXTENSION_ID`  | The ID of your Chrome extension |
-| `CHROME_CLIENT_ID`     | Google OAuth2 Client ID         |
-| `CHROME_CLIENT_SECRET` | Google OAuth2 Client Secret     |
-| `CHROME_REFRESH_TOKEN` | Google OAuth2 Refresh Token     |
+| Secret                  | Description                     |
+| ----------------------- | ------------------------------- |
+| `AMO_API_KEY`           | AMO JWT issuer key (Firefox)    |
+| `AMO_API_SECRET`        | AMO JWT secret (Firefox)        |
+| `CHROME_EXTENSION_ID`   | The ID of your Chrome extension |
+| `CHROME_CLIENT_ID`      | Google OAuth2 Client ID         |
+| `CHROME_CLIENT_SECRET`  | Google OAuth2 Client Secret     |
+| `CHROME_REFRESH_TOKEN`  | Google OAuth2 Refresh Token     |
+| `CLOUDFLARE_API_TOKEN`  | Worker and D1 deployment token  |
+| `CLOUDFLARE_ACCOUNT_ID` | Cloudflare account ID           |
+| `R2_ACCESS_KEY_ID`      | Terraform-state R2 access key   |
+| `R2_SECRET_ACCESS_KEY`  | Terraform-state R2 secret key   |
+| `TURNSTILE_SITE_KEY`    | Sync-code activation site key   |
+| `TURNSTILE_SECRET_KEY`  | Sync-code activation secret     |
 
 Generate Firefox secrets at [addons.mozilla.org/developers/addon/api/key](https://addons.mozilla.org/developers/addon/api/key).
 For Chrome, follow the [Google documentation](https://developer.chrome.com/docs/webstore/using-api) to set up API access.

@@ -8,7 +8,8 @@
   const windows =
     typeof browser !== "undefined" ? browser.windows : chrome.windows;
 
-  const { MANUAL_BPM_STORAGE_KEY } = window.DeezerBpm.constants;
+  const { MANUAL_BPM_STORAGE_KEY, SYNC_SETTINGS_KEY } =
+    window.DeezerBpm.constants;
   const { parseManualOverrides } = window.DeezerBpm.manualBpm;
   const { buildCsv } = window.DeezerBpm.csv;
 
@@ -22,12 +23,35 @@
       exportBtn: document.getElementById("export-btn"),
       importBtn: document.getElementById("import-btn"),
       status: document.getElementById("status"),
+      syncCode: document.getElementById("sync-code"),
+      generateBtn: document.getElementById("generate-btn"),
+      copyBtn: document.getElementById("copy-btn"),
+      syncEnabled: document.getElementById("sync-enabled"),
+      autoSync: document.getElementById("auto-sync"),
+      mergeBtn: document.getElementById("merge-btn"),
+      lwwBtn: document.getElementById("lww-btn"),
+      syncInfo: document.getElementById("sync-info"),
     };
 
     els.exportBtn.addEventListener("click", onExport);
     els.importBtn.addEventListener("click", openImportWindow);
 
+    els.generateBtn.addEventListener("click", onGenerateCode);
+    els.copyBtn.addEventListener("click", onCopyCode);
+    els.syncCode.addEventListener("change", () =>
+      saveSyncSettings({ code: normalizeCode(els.syncCode.value) }),
+    );
+    els.syncEnabled.addEventListener("change", () =>
+      saveSyncSettings({ syncEnabled: els.syncEnabled.checked }),
+    );
+    els.autoSync.addEventListener("change", () =>
+      saveSyncSettings({ autoSync: els.autoSync.checked }),
+    );
+    els.mergeBtn.addEventListener("click", () => onSync("merge"));
+    els.lwwBtn.addEventListener("click", () => onSync("lww"));
+
     refreshCount();
+    loadSyncSettings();
   }
 
   // ── Storage ────────────────────────────────────────────────────────────────
@@ -102,6 +126,203 @@
       width: 360,
       height: 340,
     });
+  }
+
+  // ── Sync ──────────────────────────────────────────────────────────────────
+
+  // Uppercase and strip whitespace; keep the alphabet + dashes the Worker allows.
+  function normalizeCode(raw) {
+    return String(raw || "")
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z0-9-]/g, "");
+  }
+
+  async function onGenerateCode() {
+    const result = await runtime.sendMessage({ type: "open-sync-activation" });
+    if (!result?.ok) {
+      setStatus(
+        `Could not open code creation: ${result?.error || "unknown error"}`,
+        "err",
+      );
+      return;
+    }
+    setStatus("Create the code in the new tab, then paste it here.", "info");
+  }
+
+  async function onCopyCode() {
+    const code = els.syncCode.value.trim();
+    if (!code) {
+      setStatus("Nothing to copy — generate a code first.", "err");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(code);
+      setStatus("Sync code copied to clipboard.", "ok");
+    } catch {
+      // Clipboard API can be unavailable; fall back to selecting the field.
+      els.syncCode.focus();
+      els.syncCode.select();
+      setStatus("Press Ctrl+C to copy the selected code.", "info");
+    }
+  }
+
+  async function readSyncSettings() {
+    const result = await storage.local.get(SYNC_SETTINGS_KEY);
+    const s = result[SYNC_SETTINGS_KEY];
+    return {
+      code: "",
+      syncEnabled: true,
+      autoSync: false,
+      lastSyncAt: 0,
+      lastStatus: "",
+      ...(s && typeof s === "object" ? s : {}),
+    };
+  }
+
+  async function loadSyncSettings() {
+    try {
+      const settings = await readSyncSettings();
+      els.syncCode.value = settings.code || "";
+      els.syncEnabled.checked = settings.syncEnabled !== false;
+      els.autoSync.checked = !!settings.autoSync;
+      renderSyncInfo(settings);
+      updateSyncButtons();
+    } catch {
+      els.syncInfo.textContent = "Could not read sync settings.";
+    }
+  }
+
+  async function saveSyncSettings(patch) {
+    const current = await readSyncSettings();
+    const codeChanged =
+      Object.hasOwn(patch, "code") && patch.code !== current.code;
+    const next = {
+      ...current,
+      ...patch,
+      ...(codeChanged
+        ? {
+            lastSyncAt: 0,
+            lastStatus: "",
+            syncStateCode: "",
+            syncRevision: 0,
+            syncBaseline: {},
+            syncConflicts: {},
+          }
+        : {}),
+    };
+    await storage.local.set({ [SYNC_SETTINGS_KEY]: next });
+    renderSyncInfo(next);
+    updateSyncButtons();
+  }
+
+  function updateSyncButtons() {
+    const hasCode = !!els.syncCode.value.trim();
+    const enabled = els.syncEnabled.checked;
+    els.autoSync.disabled = !enabled;
+    els.mergeBtn.disabled = !enabled || !hasCode;
+    els.lwwBtn.disabled = !enabled || !hasCode;
+  }
+
+  function renderSyncInfo(settings) {
+    if (settings.syncEnabled === false) {
+      els.syncInfo.textContent = "Sync is disabled.";
+      return;
+    }
+    if (!settings.code) {
+      els.syncInfo.textContent = "Not syncing yet — create or paste a code.";
+      return;
+    }
+    const bad = (settings.lastStatus || "").startsWith("error");
+    // Check for a failure before the lastSyncAt gate below -- it's only ever
+    // set on a successful sync, so a sync that fails before its first
+    // success would otherwise be reported as "Not synced yet.", hiding the
+    // error entirely.
+    if (bad && !settings.lastSyncAt) {
+      els.syncInfo.textContent = `Sync failed: ${settings.lastStatus.slice(7)}`;
+      return;
+    }
+    if (!settings.lastSyncAt) {
+      els.syncInfo.textContent = settings.autoSync
+        ? "Auto-sync on. Not synced yet."
+        : "Not synced yet.";
+      return;
+    }
+    const when = new Date(settings.lastSyncAt).toLocaleString();
+    // Read structured fields directly instead of parsing them back out of
+    // lastStatus text, which breaks as soon as more than one thing needs
+    // reporting at once (e.g. conflicts *and* a full space).
+    const conflictCount = Object.keys(settings.syncConflicts || {}).length;
+    const full = settings.lastCapacityExceeded === true;
+    if (bad) {
+      els.syncInfo.textContent = `Last sync failed (${when}): ${settings.lastStatus.slice(7)}`;
+    } else if (conflictCount || full) {
+      const parts = [];
+      if (conflictCount) {
+        parts.push(
+          `${conflictCount} unresolved conflict${conflictCount === 1 ? "" : "s"}`,
+        );
+      }
+      if (full) parts.push("space full");
+      els.syncInfo.textContent = `Last synced ${when}; ${parts.join(", ")}.`;
+    } else {
+      els.syncInfo.textContent = `Last synced ${when}${
+        settings.autoSync ? " · auto-sync on" : ""
+      }.`;
+    }
+  }
+
+  async function onSync(mode) {
+    // Persist whatever is in the field first, in case the user pasted a code
+    // and clicked without blurring it.
+    const code = normalizeCode(els.syncCode.value);
+    els.syncCode.value = code;
+    if (!code) {
+      setStatus("Enter or generate a sync code first.", "err");
+      return;
+    }
+    await saveSyncSettings({ code });
+
+    els.mergeBtn.disabled = true;
+    els.lwwBtn.disabled = true;
+    setStatus(
+      mode === "lww" ? "Syncing with local changes…" : "Syncing…",
+      "info",
+    );
+
+    try {
+      const res = await runtime.sendMessage({ type: "sync", mode });
+      if (res && res.ok) {
+        if (res.capacityExceeded) {
+          // Downloads still succeeded; only the upload was refused.
+          setStatus(
+            "This sync code is full, so new tracks were not uploaded. " +
+              "Remove some manual BPMs, or create a new code.",
+            "err",
+          );
+        } else if (res.conflicts) {
+          setStatus(
+            `Merged with ${res.conflicts} conflicting track${
+              res.conflicts === 1 ? "" : "s"
+            } kept local. Use local changes to upload them.`,
+            "info",
+          );
+        } else {
+          setStatus(
+            `Synced ${res.count} manual BPM${res.count === 1 ? "" : "s"}.`,
+            "ok",
+          );
+        }
+      } else {
+        setStatus(`Sync failed: ${res?.error || "unknown error"}`, "err");
+      }
+    } catch (error) {
+      setStatus(`Sync failed: ${error?.message || error}`, "err");
+    } finally {
+      updateSyncButtons();
+      refreshCount();
+      loadSyncSettings();
+    }
   }
 
   // ── UI ───────────────────────────────────────────────────────────────────────

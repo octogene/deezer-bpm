@@ -11,7 +11,6 @@
   },
   "homepage_url": "https://octogene.github.io/deezer-bpm/",
   "background": {
-    "service_worker": "background.js",
     "scripts": ["background.js"]
   },
   "action": {
@@ -22,13 +21,18 @@
       "128": "icons/icon128.png"
     }
   },
-  "permissions": ["storage"],
-  "host_permissions": ["https://www.deezer.com/*", "https://api.deezer.com/*"],
+  "permissions": ["storage", "alarms"],
+  "host_permissions": [
+    "https://www.deezer.com/*",
+    "https://api.deezer.com/*",
+    "https://deezer-bpm-sync.ooctogene.workers.dev/*"
+  ],
   "browser_specific_settings": {
     "gecko": {
       "id": "{daa6e7d2-9aaf-4898-89a4-0f7224841a44}",
+      "strict_min_version": "140.0",
       "data_collection_permissions": {
-        "required": ["none"]
+        "required": ["websiteContent"]
       }
     }
   },
