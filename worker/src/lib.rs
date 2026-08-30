@@ -998,12 +998,16 @@ fn activation_page(env: &Env) -> Result<Response> {
       font: 1.1rem ui-monospace, monospace; letter-spacing: .08em; word-break: break-all; }}
     /* The display rule above outranks the UA stylesheet, so hidden needs saying twice. */
     code[hidden] {{ display: none; }}
+    .notice {{ display: flex; gap: .5rem; margin-top: 1rem; padding: .7rem .9rem;
+      border: 1px solid #4a2f6b; border-radius: 8px; background: rgba(123,44,191,.15);
+      color: #c9a7ff; font-size: .85rem; line-height: 1.4; }}
   </style>
 </head>
 <body>
 <main>
   <h1>Create a sync code</h1>
   <p>Complete the check, then copy the code into the extension.</p>
+  <p class="notice">ⓘ A sync code that hasn't been used for 6 months will be deleted, along with everything stored under it.</p>
   <div class="cf-turnstile" data-sitekey="{site_key}"></div>
   <button id="create" type="button">Create code</button>
   <p id="status"></p>
